@@ -27,7 +27,7 @@ int Smart_CppForG::main(int argc, char** argv) {
 	genesys->getTraceManager()->setTraceLevel(TraitsApp<GenesysApplication_if>::traceLevel);
 	setDefaultTraceHandlers(genesys->getTraceManager());
 	PluginManager* plugins = genesys->getPluginManager();
-	plugins->autoInsertPlugins("autoloadplugins.txt");
+    plugins->autoInsertPlugins("autoloadplugins.txt");
 	Model* model = genesys->getModelManager()->newModel();
 	// create model
 	Create* create = plugins->newInstance<Create>(model);
@@ -40,16 +40,16 @@ int Smart_CppForG::main(int argc, char** argv) {
 	cpp2->getConnectionManager()->insert(dispose);
 	// set parameters for cpp1 and cpp2 components
 	std::string includeCode = "\
-		#include \"../../../../kernel/simulator/ModelSimulation.h\"\n\
-		#include \"../../../../kernel/simulator/ModelDataDefinition.h\"\n\
+        #include \"kernel/simulator/ModelSimulation.h\"\n\
+        #include \"kernel/simulator/ModelDataDefinition.h\"\n\
 ";
 	cpp1->setIncludesCode(includeCode);
 	cpp2->setIncludesCode(includeCode);
 	std::string cppDispachEventCode = "\
-	std::cout << \"Executando código do usuário\" << std::endl;\n\
+    std::cout << \"Executando código do usuário\" << std::endl;\n\
 	std::cout << \"Os ponteiros são \" << simulator << \" , \" << model << \" , \" << entity << std::endl;\n\
-	std::cout << \"O nome desta entidade é \" << entity->getName() << std::endl;\n\
-	unsigned int numComponentes = model->getComponents()->getAllComponents()->size();\n\
+    std::cout << \"O nome desta entidade é \" << entity->getEntityTypeName() << std::endl;\n\
+    unsigned int numComponentes = model->getComponentManager()->getAllComponents()->size();\n\
 	std::cout << \"Este modelo tem \" << numComponentes << \" componentes\" << std::endl;\n\
 	double tnow = model->getSimulation()->getSimulatedTime();\n\
 	std::cout << \"O tempo simulado atual é \" << tnow << std::endl;\n\

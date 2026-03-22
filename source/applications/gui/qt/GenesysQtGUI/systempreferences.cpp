@@ -2,7 +2,7 @@
 
 bool SystemPreferences::_startMaximized = false;
 bool SystemPreferences::_autoLoadPlugins = true;
-unsigned short int SystemPreferences::_modelAtStart = 2;
+unsigned short int SystemPreferences::_modelAtStart = 1;
 std::string SystemPreferences::_modelfilename = "../../../../../../../models/Smart_Delay.gen";  //"";
 // "../../../../../models/Smart_Delay.gen"
 

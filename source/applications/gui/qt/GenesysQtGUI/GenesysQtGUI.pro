@@ -17,6 +17,7 @@ CONFIG -= warn_on
 # Específico por compilador (opcional, mas robusto):
 #QMAKE_CXXFLAGS_CLANG += -Wno-unused-parameter -Wno-error=unused-parameter
 #QMAKE_CXXFLAGS_GCC   += -Wno-unused-parameter -Wno-error=unused-parameter
+QMAKE_LFLAGS += -rdynamic -ldl
 
 # You can make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.

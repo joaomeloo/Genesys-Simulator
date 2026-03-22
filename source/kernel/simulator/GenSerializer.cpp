@@ -128,7 +128,7 @@ bool GenSerializer::load(std::istream& input) {
 		// for each field, separate key and value and form a record
         //regex = {R"([=]+)"};
         regex = std::regex(R"([=]+)");
-
+		i = 0;
 
 		for (auto it = lstfields.begin(); it != lstfields.end(); it++, i++) {
 			std::string key, val;
