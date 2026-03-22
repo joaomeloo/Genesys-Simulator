@@ -3,38 +3,38 @@ source ./scripts/env.sh
 while true
 do
 read -p "
-Menu: O que deseja executar?
+Choose an option:
 .............................
-1. Build GenESyS Image
-2. Debug GenESyS Image
-3. GenESyS GUI
-4. GenESyS Shell
-5. IDE do GenESyS (QtCreator)
-6. Sair da aplicação
+1. Run GenESyS GUI
+2. Run GenESyS Shell
+3. Run developer GUI
+4. Attach to docker image
+5. Exit
 > " input
 
-    if [ "$input" == "6" ]; then
+    if [ "$input" == "5" ]; then
         break
     fi
 
     case "$input" in
         "1")
         bash ./scripts/build.sh
+        bash ./scripts/run_docker.sh run_user_gui
         ;;
         "2")
-        bash ./scripts/debug.sh
+        bash ./scripts/build.sh
+        bash ./scripts/run_docker.sh run_user_shell
         ;;
         "3")
-        bash ./scripts/gui.sh
+        bash ./scripts/build.sh
+        bash ./scripts/run_docker.sh run_developer_gui
         ;;
         "4")
-        bash ./scripts/shell.sh
-        ;;
-        "5")
-        bash ./scripts/qt.sh
+        bash ./scripts/build.sh
+        bash ./scripts/run_docker.sh attach_to_docker_image
         ;;
         *)
-        echo -e "\nOpção inválida."
+        echo -e "\nInvalid option."
         ;;
     esac
 done
