@@ -21,6 +21,9 @@ public:
     static std::string modelfilename();
     static void setModelfilename(const std::string &newModelfilename);
 
+    static bool darkMode();
+    static void setDarkMode(bool newDarkMode);
+
 private:
     SystemPreferences(){};
 private:
@@ -28,6 +31,7 @@ private:
     static bool _autoLoadPlugins;
     static unsigned short int _modelAtStart;
     static std::string _modelfilename;
+	static bool _darkMode;
 };
 
 #endif // SYSTEMPREFERENCES_H

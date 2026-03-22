@@ -737,4 +737,8 @@
 		<file>resources/ToolBar/_zoomout.bmp</file>
 		<file>resources/ToolBar/_zoomregiao.bmp</file>
 	</qresource>
+	<qresource prefix="/styles">
+		<file>resources/styles/light.qss</file>
+		<file>resources/styles/dark.qss</file>
+	</qresource>
 </RCC>

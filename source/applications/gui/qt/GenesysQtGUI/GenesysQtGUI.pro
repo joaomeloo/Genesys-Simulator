@@ -261,6 +261,7 @@ SOURCES += \
     dialogs/DialogSelectVariable.cpp \
     dialogs/DialogTimerConfigure.cpp \
     dialogs/Dialogmodelinformation.cpp \
+    dialogs/DialogExpressionBuilder.cpp \
     dialogs/dialogBreakpoint.cpp \
     dialogs/dialogpluginmanager.cpp \
     dialogs/dialogsimulationconfigure.cpp \
@@ -554,6 +555,7 @@ HEADERS += \
     dialogs/DialogSelectVariable.h \
     dialogs/DialogTimerConfigure.h \
     dialogs/Dialogmodelinformation.h \
+    dialogs/DialogExpressionBuilder.h \
     dialogs/dialogBreakpoint.h \
     dialogs/dialogpluginmanager.h \
     dialogs/dialogsimulationconfigure.h \
@@ -629,6 +631,7 @@ HEADERS += \
 FORMS += \
     dialogs/DialogTimerConfigure.ui \
     dialogs/Dialogmodelinformation.ui \
+    dialogs/DialogExpressionBuilder.ui \
     dialogs/dialogBreakpoint.ui \
     dialogs/dialogpluginmanager.ui \
     dialogs/dialogsimulationconfigure.ui \
