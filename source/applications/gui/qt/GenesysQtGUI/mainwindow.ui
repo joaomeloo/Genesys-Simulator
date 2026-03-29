@@ -166,43 +166,6 @@
                         <verstretch>3</verstretch>
                        </sizepolicy>
                       </property>
-                      <property name="palette">
-                       <palette>
-                        <active>
-                         <colorrole role="Window">
-                          <brush brushstyle="SolidPattern">
-                           <color alpha="255">
-                            <red>255</red>
-                            <green>255</green>
-                            <blue>255</blue>
-                           </color>
-                          </brush>
-                         </colorrole>
-                        </active>
-                        <inactive>
-                         <colorrole role="Window">
-                          <brush brushstyle="SolidPattern">
-                           <color alpha="255">
-                            <red>239</red>
-                            <green>239</green>
-                            <blue>239</blue>
-                           </color>
-                          </brush>
-                         </colorrole>
-                        </inactive>
-                        <disabled>
-                         <colorrole role="Window">
-                          <brush brushstyle="SolidPattern">
-                           <color alpha="255">
-                            <red>255</red>
-                            <green>255</green>
-                            <blue>255</blue>
-                           </color>
-                          </brush>
-                         </colorrole>
-                        </disabled>
-                       </palette>
-                      </property>
                       <property name="autoFillBackground">
                        <bool>false</bool>
                       </property>
@@ -856,6 +819,8 @@
     <addaction name="actionViewUngroup"/>
     <addaction name="separator"/>
     <addaction name="actionViewConfigure"/>
+    <addaction name="separator"/>
+    <addaction name="actionViewDarkMode"/>
    </widget>
    <widget class="QMenu" name="menuEdit">
     <property name="title">
@@ -1226,6 +1191,9 @@ li.checked::marker { content: &quot;\2612&quot;; }
    <addaction name="separator"/>
    <addaction name="actionAnimateExpression"/>
    <addaction name="actionAnimateVariable"/>
+   <addaction name="separator"/>
+   <addaction name="actionExpressionBuilder"/>
+   <addaction name="separator"/>
    <addaction name="actionAnimatePlot"/>
    <addaction name="actionAnimateResource"/>
    <addaction name="actionAnimateQueue"/>
@@ -1736,6 +1704,18 @@ li.checked::marker { content: &quot;\2612&quot;; }
     <string>Expression</string>
    </property>
   </action>
+  <action name="actionExpressionBuilder">
+   <property name="icon">
+    <iconset resource="GenesysQtGUI_resources.qrc">
+     <normaloff>:/icons3/resources/icons/pack3/ico/calculator.ico</normaloff>:/icons3/resources/icons/pack3/ico/calculator.ico</iconset>
+   </property>
+   <property name="text">
+    <string>Expression Builder</string>
+   </property>
+   <property name="toolTip">
+    <string>Open Expression Builder</string>
+   </property>
+  </action>
   <action name="actionAnimateResource">
    <property name="icon">
     <iconset resource="GenesysQtGUI_resources.qrc">
@@ -2007,6 +1987,21 @@ li.checked::marker { content: &quot;\2612&quot;; }
    </property>
    <property name="toolTip">
     <string>Configure View</string>
+   </property>
+  </action>
+  <action name="actionViewDarkMode">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="GenesysQtGUI_resources.qrc">
+     <normaloff>:/icons3/resources/icons/pack3/ico/bulb.ico</normaloff>:/icons3/resources/icons/pack3/ico/bulb.ico</iconset>
+   </property>
+   <property name="text">
+    <string>Dark Mode</string>
+   </property>
+   <property name="toolTip">
+    <string>Toggle Dark Mode</string>
    </property>
   </action>
   <action name="actionSimulatorsPluginManager">

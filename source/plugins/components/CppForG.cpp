@@ -142,7 +142,6 @@ bool CppForG::_check(std::string& errorMessage) {
 //\n\
 #include <iostream>\n\
 #include <string>\n\
-//@TODO: Adjust depending on the running path\n\
 #include \"../../../../kernel/simulator/Entity.h\"\n\
 #include \"../../../../kernel/simulator/Model.h\"\n\
 // user includes\n\
@@ -162,7 +161,7 @@ extern \"C\" void onDispatchEvent" + "(Simulator* simulator, Model* model, Entit
 	try {\n\
 		_onDispatchEvent_" + name + "(simulator, model, entity);\n\
 	} catch (const std::exception& e) {\n\
-		model->getTracer()->traceError(e, \"Error while executing onDispatchEvent cpp user code in " + name + ".\");\n\
+        model->getTracer()->traceError(\"Error while executing onDispatchEvent cpp user code in " + name + ".\", e);\n\
 	}\n\
 }\n\
 \n\
@@ -170,7 +169,7 @@ extern \"C\" void initBetweenReplications" + "(Model* model) {\n\
 	try {\n\
 		_initBetweenReplications_" + name + "(model);\n\
 	} catch (const std::exception& e) {\n\
-		model->getTracer()->traceError(e, \"Error while executing initBetweenReplications cpp user code in " + name + ".\");\n\
+        model->getTracer()->traceError(\"Error while executing initBetweenReplications cpp user code in " + name + ".\", e);\n\
 	}\n\
 }\n";
 

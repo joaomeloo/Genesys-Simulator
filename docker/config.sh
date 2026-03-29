@@ -1,31 +1,13 @@
-# -------------------------------------------------------- #
-# Configurações de Usuário                                 #
-# -------------------------------------------------------- #
-
-### Configurações de Ambiente
+# Arquivo de configuração de ambiente
 
 # Se a execução é local ou remota (1 - código remoto, 0 - código local)
 REMOTE=0
-
-# Driver gráfico
-MESA_LOADER_DRIVER_OVERRIDE=zink
-
-
-### Configurações da Execução Docker
 
 # Usuário docker 
 GENESYS_USER="genesys-user"
 
 # Nome da imagem Docker
 GENESYS_IMAGE="genesys-image"
-
-
-
-# -------------------------------------------------------- #
-# Configurações de Desenvolvedor                           #
-# -------------------------------------------------------- #
-
-### Configurações do Build Docker
 
 # Utilizar cache no build da imagem (1 - sim, 0 - não)
 DOCKER_CACHE=1
@@ -39,9 +21,6 @@ GENESYS_REPO=https://github.com/rlcancian/Genesys-Simulator
 # Branch do repositório a ser utilizada
 GENESYS_BRANCH=master
 
-
-### Configurações de Estrutura Interna
-
 # Path da raiz do projeto a ser utilizado dentro da imagem no modo local
 GENESYS_PROJECT=$(cd .. && pwd)
 
@@ -52,10 +31,18 @@ GENESYS_REMOTE_ROOT=/home/genesys/remote
 GENESYS_LOCAL_ROOT=/home/genesys/local
 
 # Path do executável compilado para execução do genesys pelo terminal
-GENESYS_NOGUI_SUBPATH=release/GenesysShell
+GENESYS_NOGUI_SUBPATH=release/
+GENESYS_NOGUI_SUBPATH_BIN=release/GenesysShell
 
 # Path do executável compilado para execução do genesys pela interface gráfica
-GENESYS_GUI_SUBPATH=source/applications/gui/qt/build-GenesysQtGUI-Desktop-Debug/GenesysQtGUI
+GENESYS_GUI_SUBPATH=source/applications/gui/qt/GenesysQtGUI/
+GENESYS_GUI_SUBPATH_BIN=source/applications/gui/qt/GenesysQtGUI/GenesysQtGUI
 
 # Path do projeto Qt para execução do genesys pelo QtCreator
 GENESYS_PROJECT_SUBPATH=source/applications/gui/qt/GenesysQtGUI/GenesysQtGUI.pro
+
+DISPLAY=$DISPLAY
+
+QT_X11_NO_MITSHM=1
+
+XDG_RUNTIME_DIR=/run/user/1001

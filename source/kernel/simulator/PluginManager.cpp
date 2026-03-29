@@ -166,6 +166,10 @@ Plugin * PluginManager::insert(std::string dynamicLibraryFilename) {
 	return plugin; //@TODO Use of memory after it is freed
 }
 
+bool PluginManager::insert(Plugin* plugin) {
+	return _insert(plugin);
+}
+
 bool PluginManager::remove(std::string dynamicLibraryFilename) {
 
 	Plugin* pi = this->find(dynamicLibraryFilename);

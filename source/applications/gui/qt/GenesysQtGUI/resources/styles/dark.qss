@@ -1,0 +1,225 @@
+/* Dark Theme for GenESyS Simulator */
+
+/* Base */
+QMainWindow, QDialog, QWidget {
+    background-color: #2b2b2b;
+    color: #d4d4d4;
+}
+
+/* Disabled */
+QWidget:disabled {
+    color: #606060;
+}
+
+/* Menu */
+QMenuBar {
+    background-color: #2d2d2d;
+    color: #d4d4d4;
+}
+
+QMenuBar::item:selected {
+    background-color: #3a82f7;
+}
+
+QMenu {
+    background-color: #2d2d2d;
+    color: #d4d4d4;
+    border: 1px solid #3a3a3a;
+}
+
+QMenu::item:selected {
+    background-color: #3a82f7;
+    color: #ffffff;
+}
+
+QMenu::item:disabled {
+    color: #606060;
+}
+
+/* Toolbar */
+QToolBar {
+    background-color: #2d2d2d;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+QToolButton {
+    background-color: transparent;
+    border: 1px solid transparent;
+    padding: 4px;
+    color: #d4d4d4;
+}
+
+QToolButton:hover {
+    background-color: #3a82f7;
+    border: 1px solid #5a9cff;
+}
+
+QToolButton:pressed {
+    background-color: #2f6fd6;
+}
+
+QToolButton:disabled {
+    color: #606060;
+}
+
+/* Dock */
+QDockWidget {
+    background-color: #2b2b2b;
+    color: #d4d4d4;
+}
+
+QDockWidget::title {
+    background-color: #2d2d2d;
+    padding: 6px;
+}
+
+/* Tabs */
+QTabWidget::pane {
+    border: 1px solid #3a3a3a;
+    background-color: #2b2b2b;
+}
+
+QTabBar::tab {
+    background-color: #252526;
+    color: #d4d4d4;
+    border: 1px solid #3a3a3a;
+    padding: 6px 12px;
+}
+
+QTabBar::tab:selected {
+    background-color: #2b2b2b;
+    border-bottom: 2px solid #3a82f7;
+    font-weight: bold;
+}
+
+QTabBar::tab:hover {
+    background-color: #3a82f7;
+}
+
+/* Lists / Trees */
+QTreeWidget, QTreeView,
+QListWidget, QListView {
+    background-color: #252526;
+    color: #d4d4d4;
+    border: 1px solid #3a3a3a;
+    alternate-background-color: #2a2d2e;
+}
+
+QTreeWidget::item:selected, 
+QTreeView::item:selected,
+QListWidget::item:selected, 
+QListView::item:selected {
+    background-color: #3a82f7;
+    color: #ffffff;
+}
+
+QTreeWidget::item:hover, 
+QTreeView::item:hover,
+QListWidget::item:hover, 
+QListView::item:hover {
+    background-color: #2f6fd6;
+}
+
+/* Tables */
+QTableWidget, QTableView {
+    background-color: #252526;
+    color: #d4d4d4;
+    gridline-color: #3a3a3a;
+    border: 1px solid #3a3a3a;
+}
+
+QTableWidget::item:selected, 
+QTableView::item:selected {
+    background-color: #3a82f7;
+    color: #ffffff;
+}
+
+QHeaderView::section {
+    background-color: #2d2d2d;
+    color: #d4d4d4;
+    padding: 4px;
+    border: 1px solid #3a3a3a;
+}
+
+/* Text */
+QLineEdit, QTextEdit, QPlainTextEdit {
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    border: 1px solid #3a3a3a;
+    padding: 4px;
+    selection-background-color: #264f78;
+    selection-color: #ffffff;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #3c3f41;
+    color: #d4d4d4;
+    border: 1px solid #3a3a3a;
+    padding: 5px 15px;
+    border-radius: 4px;
+}
+
+QPushButton:hover {
+    background-color: #3a82f7;
+    border: 1px solid #5a9cff;
+}
+
+QPushButton:pressed {
+    background-color: #2f6fd6;
+}
+
+QPushButton:disabled {
+    background-color: #3c3f41;
+    color: #606060;
+    border: 1px solid #3a3a3a;
+}
+
+/* ComboBox */
+QComboBox {
+    background-color: #2b2b2b;
+    color: #d4d4d4;
+    border: 1px solid #3a3a3a;
+    padding: 3px;
+}
+
+QComboBox:hover {
+    border: 1px solid #3a82f7;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #252526;
+    color: #d4d4d4;
+    selection-background-color: #3a82f7;
+}
+
+/* Scrollbars */
+QScrollBar:vertical, QScrollBar:horizontal {
+    background-color: #2d2d2d;
+    border: none;
+}
+
+QScrollBar::handle {
+    background-color: #3a3a3a;
+}
+
+QScrollBar::handle:hover {
+    background-color: #5a9cff;
+}
+
+/* Graphics View */
+QGraphicsView {
+    background-color: #1e1e1e;
+    border: 1px solid #3a3a3a;
+}
+
+/* Labels */
+QLabel {
+    color: #d4d4d4;
+}
+
+/* Status Bar */
+QStatusBar {
+    background-color: #2d2d2d;
+    color: #d4d4d4;
+}

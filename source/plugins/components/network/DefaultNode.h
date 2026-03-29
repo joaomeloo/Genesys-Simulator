@@ -71,10 +71,10 @@ private: /// new private user methods
 private: /// Attributes that should be loaded or saved with this component (Persistent Fields)
 
 	/// Default values for the attributes. Used on initing, loading and saving
-	const struct DEFAULT_VALUES {
+	// const struct DEFAULT_VALUES {
         //const std::string someString = "Test";
         //const unsigned int someUint = 1;
-	} DEFAULT;
+	// } DEFAULT;
     //std::string _someString = DEFAULT.someString;
     //unsigned int _someUint = DEFAULT.someUint;
     List<DefaultNodeTransition*>* _transitions = new List<DefaultNodeTransition*>();

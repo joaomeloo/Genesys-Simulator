@@ -7,6 +7,8 @@
 #include "dialogs/dialogpluginmanager.h"
 #include "dialogs/dialogsystempreferences.h"
 #include "dialogs/DialogFind.h"
+#include "dialogs/DialogExpressionBuilder.h"
+#include "systempreferences.h"
 
 #include "actions/DeleteUndoCommand.h"
 #include "actions/PasteUndoCommand.h"
@@ -582,10 +584,34 @@ void MainWindow::on_actionAnimatePlot_triggered()
 }
 
 
+void MainWindow::on_actionExpressionBuilder_triggered()
+{
+    DialogExpressionBuilder* dialog = new DialogExpressionBuilder(this);
+    dialog->show();
+}
+
+
 void MainWindow::on_actionViewConfigure_triggered()
 {
     _showMessageNotImplemented();
 }
+
+
+void MainWindow::on_actionViewDarkMode_triggered()
+{
+    bool darkMode = ui->actionViewDarkMode->isChecked();
+    SystemPreferences::setDarkMode(darkMode);
+    SystemPreferences::save();
+    
+    // Load and apply the appropriate stylesheet
+    QFile styleFile(darkMode ? ":/styles/resources/styles/dark.qss" : ":/styles/resources/styles/light.qss");
+    if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
+        QString styleSheet = QLatin1String(styleFile.readAll());
+        qApp->setStyleSheet(styleSheet);
+        styleFile.close();
+    }
+}
+
 
 //void MainWindow::on_actionConfigure_triggered() {//?????????????????????????
 //}

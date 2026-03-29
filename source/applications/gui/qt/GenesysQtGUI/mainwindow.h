@@ -56,6 +56,7 @@ private slots:
 	void on_actionShowRule_triggered();
 	void on_actionShowGuides_triggered();
 	void on_actionViewConfigure_triggered();
+	void on_actionViewDarkMode_triggered();
 
     void on_actionZoom_In_triggered();
     void on_actionZoom_Out_triggered();
@@ -79,6 +80,8 @@ private slots:
 	void on_actionAnimateAttribute_triggered();
 	void on_actionAnimateStatistics_triggered();
 	void on_actionAnimatePlot_triggered();
+	
+	void on_actionExpressionBuilder_triggered();
 
 	void on_actionSimulationStop_triggered();
 	void on_actionSimulationStart_triggered();

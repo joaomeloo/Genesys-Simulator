@@ -108,7 +108,7 @@ private:
 		const std::string outputDir = ".temp/";
 		const std::string outputFilename = "";
 		const std::string compiler = "g++";
-		const std::string flagsGeneral = "-v -w -std=c++14";
+        const std::string flagsGeneral = "-v -w -std=c++14 -I../../../../../../../source";
 		const std::string flagsDynamicLibrary = "-shared -fPIC";
 		const std::string flagsStaticLibrary = "-fPIC";
 		const std::string flagsExecutable = "";

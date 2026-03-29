@@ -17,6 +17,7 @@ CONFIG -= warn_on
 # Específico por compilador (opcional, mas robusto):
 #QMAKE_CXXFLAGS_CLANG += -Wno-unused-parameter -Wno-error=unused-parameter
 #QMAKE_CXXFLAGS_GCC   += -Wno-unused-parameter -Wno-error=unused-parameter
+QMAKE_LFLAGS += -rdynamic -ldl
 
 # You can make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.
@@ -90,9 +91,13 @@ SOURCES += \
     ../../../../plugins/components/DiffEquations.cpp \
     ../../../../plugins/components/Dispose.cpp \
     ../../../../plugins/components/DropOff.cpp \
+	../../../../plugins/components/DTBToken.cpp \
     ../../../../plugins/components/DummyComponent.cpp \
     ../../../../plugins/components/Enter.cpp \
     ../../../../plugins/components/Exit.cpp \
+	../../../../plugins/components/ExtendedFSMComponent.cpp \
+    ../../../../plugins/components/FSMState.cpp \
+	../../../../plugins/components/FSMTransition.cpp \
     ../../../../plugins/components/PickableStationItem.cpp \
     ../../../../plugins/components/SPICECircuit.cpp \
     ../../../../plugins/components/SPICENode.cpp \
@@ -104,6 +109,7 @@ SOURCES += \
     ../../../../plugins/components/OLD_ODEelement.cpp \
     ../../../../plugins/components/PickStation.cpp \
     ../../../../plugins/components/PickUp.cpp \
+    ../../../../plugins/components/Place.cpp \
     ../../../../plugins/components/Process.cpp \
     ../../../../plugins/components/QueueableItem.cpp \
     ../../../../plugins/components/Record.cpp \
@@ -119,9 +125,11 @@ SOURCES += \
     ../../../../plugins/components/Stop.cpp \
     ../../../../plugins/components/Store.cpp \
     ../../../../plugins/components/Submodel.cpp \
+    ../../../../plugins/components/Transition.cpp \
     ../../../../plugins/components/Unstore.cpp \
     ../../../../plugins/components/Write.cpp \
     ../../../../plugins/components/network/DefaultNode.cpp \
+	../../../../plugins/components/tinyexpr/tinyexpr.c \
     ../../../../plugins/data/AssignmentItem.cpp \
     ../../../../plugins/data/CppCompiler.cpp \
     ../../../../plugins/data/DummyElement.cpp \
@@ -201,6 +209,7 @@ SOURCES += \
     ../../../terminal/examples/smarts/Smart_CppForG.cpp \
     ../../../terminal/examples/smarts/Smart_Delay.cpp \
     ../../../terminal/examples/smarts/Smart_Dummy.cpp \
+	../../../terminal/examples/smarts/Smart_EFSM_TrafficLight.cpp \
     ../../../terminal/examples/smarts/Smart_Failures.cpp \
     ../../../terminal/examples/smarts/Smart_HoldSearchRemove.cpp \
     ../../../terminal/examples/smarts/Smart_LSODE.cpp \
@@ -211,6 +220,7 @@ SOURCES += \
     ../../../terminal/examples/smarts/Smart_OnEvent.cpp \
     ../../../terminal/examples/smarts/Smart_Parser.cpp \
     ../../../terminal/examples/smarts/Smart_ParserModelFunctions.cpp \
+	../../../terminal/examples/smarts/Smart_PetriNet.cpp \
     ../../../terminal/examples/smarts/Smart_Plugin.cpp \
     ../../../terminal/examples/smarts/Smart_Process.cpp \
     ../../../terminal/examples/smarts/Smart_ProcessSet.cpp \
@@ -260,6 +270,7 @@ SOURCES += \
     dialogs/DialogSelectVariable.cpp \
     dialogs/DialogTimerConfigure.cpp \
     dialogs/Dialogmodelinformation.cpp \
+    dialogs/DialogExpressionBuilder.cpp \
     dialogs/dialogBreakpoint.cpp \
     dialogs/dialogpluginmanager.cpp \
     dialogs/dialogsimulationconfigure.cpp \
@@ -374,9 +385,13 @@ HEADERS += \
     ../../../../plugins/components/DiffEquations.h \
     ../../../../plugins/components/Dispose.h \
     ../../../../plugins/components/DropOff.h \
+	../../../../plugins/components/DTBToken.h \
     ../../../../plugins/components/DummyComponent.h \
     ../../../../plugins/components/Enter.h \
     ../../../../plugins/components/Exit.h \
+	../../../../plugins/components/ExtendedFSMComponent.h \
+    ../../../../plugins/components/FSMState.h \
+	../../../../plugins/components/FSMTransition.h \
     ../../../../plugins/components/PickableStationItem.h \
     ../../../../plugins/components/SPICECircuit.h \
     ../../../../plugins/components/SPICENode.h \
@@ -388,6 +403,7 @@ HEADERS += \
     ../../../../plugins/components/OLD_ODEelement.h \
     ../../../../plugins/components/PickStation.h \
     ../../../../plugins/components/PickUp.h \
+	../../../../plugins/components/Placc.h \
     ../../../../plugins/components/Process.h \
     ../../../../plugins/components/QueueableItem.h \
     ../../../../plugins/components/Record.h \
@@ -403,9 +419,11 @@ HEADERS += \
     ../../../../plugins/components/Stop.h \
     ../../../../plugins/components/Store.h \
     ../../../../plugins/components/Submodel.h \
+	../../../../plugins/components/Transition.h \
     ../../../../plugins/components/Unstore.h \
     ../../../../plugins/components/Write.h \
     ../../../../plugins/components/network/DefaultNode.h \
+    ../../../../plugins/components/tinyexpr/tinyexpr.h \
     ../../../../plugins/data/AssignmentItem.h \
     ../../../../plugins/data/CppCompiler.h \
     ../../../../plugins/data/DummyElement.h \
@@ -495,6 +513,7 @@ HEADERS += \
     ../../../terminal/examples/smarts/Smart_DefaultModalModel.h \
     ../../../terminal/examples/smarts/Smart_Delay.h \
     ../../../terminal/examples/smarts/Smart_Dummy.h \
+	../../../terminal/examples/smarts/Smart_EFSM_TrafficLight.h \
     ../../../terminal/examples/smarts/Smart_Failures.h \
     ../../../terminal/examples/smarts/Smart_HoldSearchRemove.h \
     ../../../terminal/examples/smarts/Smart_LSODE.h \
@@ -505,6 +524,7 @@ HEADERS += \
     ../../../terminal/examples/smarts/Smart_OnEvent.h \
     ../../../terminal/examples/smarts/Smart_Parser.h \
     ../../../terminal/examples/smarts/Smart_ParserModelFunctions.h \
+	../../../terminal/examples/smarts/Smart_PetriNet.h \
     ../../../terminal/examples/smarts/Smart_Plugin.h \
     ../../../terminal/examples/smarts/Smart_Process.h \
     ../../../terminal/examples/smarts/Smart_ProcessSet.h \
@@ -553,6 +573,7 @@ HEADERS += \
     dialogs/DialogSelectVariable.h \
     dialogs/DialogTimerConfigure.h \
     dialogs/Dialogmodelinformation.h \
+    dialogs/DialogExpressionBuilder.h \
     dialogs/dialogBreakpoint.h \
     dialogs/dialogpluginmanager.h \
     dialogs/dialogsimulationconfigure.h \
@@ -628,6 +649,7 @@ HEADERS += \
 FORMS += \
     dialogs/DialogTimerConfigure.ui \
     dialogs/Dialogmodelinformation.ui \
+    dialogs/DialogExpressionBuilder.ui \
     dialogs/dialogBreakpoint.ui \
     dialogs/dialogpluginmanager.ui \
     dialogs/dialogsimulationconfigure.ui \

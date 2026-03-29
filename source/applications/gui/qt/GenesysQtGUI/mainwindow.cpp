@@ -161,6 +161,17 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // system preferences
     SystemPreferences::load();
+
+    // Apply dark mode if enabled
+    bool darkMode = SystemPreferences::darkMode();
+    ui->actionViewDarkMode->setChecked(darkMode);
+    QFile styleFile(darkMode ? ":/styles/resources/styles/dark.qss" : ":/styles/resources/styles/light.qss");
+    if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
+        QString styleSheet = QLatin1String(styleFile.readAll());
+        qApp->setStyleSheet(styleSheet);
+        styleFile.close();
+    }
+
     if (SystemPreferences::autoLoadPlugins()) {
         simulator->getPluginManager()->autoInsertPlugins(_autoLoadPluginsFilename.toStdString());
         // now complete the information
