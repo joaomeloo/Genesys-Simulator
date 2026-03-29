@@ -91,6 +91,7 @@ SOURCES += \
     ../../../../plugins/components/DiffEquations.cpp \
     ../../../../plugins/components/Dispose.cpp \
     ../../../../plugins/components/DropOff.cpp \
+	../../../../plugins/components/DTBToken.cpp \
     ../../../../plugins/components/DummyComponent.cpp \
     ../../../../plugins/components/Enter.cpp \
     ../../../../plugins/components/Exit.cpp \
@@ -108,6 +109,7 @@ SOURCES += \
     ../../../../plugins/components/OLD_ODEelement.cpp \
     ../../../../plugins/components/PickStation.cpp \
     ../../../../plugins/components/PickUp.cpp \
+    ../../../../plugins/components/Place.cpp \
     ../../../../plugins/components/Process.cpp \
     ../../../../plugins/components/QueueableItem.cpp \
     ../../../../plugins/components/Record.cpp \
@@ -123,6 +125,7 @@ SOURCES += \
     ../../../../plugins/components/Stop.cpp \
     ../../../../plugins/components/Store.cpp \
     ../../../../plugins/components/Submodel.cpp \
+    ../../../../plugins/components/Transition.cpp \
     ../../../../plugins/components/Unstore.cpp \
     ../../../../plugins/components/Write.cpp \
     ../../../../plugins/components/network/DefaultNode.cpp \
@@ -217,6 +220,7 @@ SOURCES += \
     ../../../terminal/examples/smarts/Smart_OnEvent.cpp \
     ../../../terminal/examples/smarts/Smart_Parser.cpp \
     ../../../terminal/examples/smarts/Smart_ParserModelFunctions.cpp \
+	../../../terminal/examples/smarts/Smart_PetriNet.cpp \
     ../../../terminal/examples/smarts/Smart_Plugin.cpp \
     ../../../terminal/examples/smarts/Smart_Process.cpp \
     ../../../terminal/examples/smarts/Smart_ProcessSet.cpp \
@@ -381,6 +385,7 @@ HEADERS += \
     ../../../../plugins/components/DiffEquations.h \
     ../../../../plugins/components/Dispose.h \
     ../../../../plugins/components/DropOff.h \
+	../../../../plugins/components/DTBToken.h \
     ../../../../plugins/components/DummyComponent.h \
     ../../../../plugins/components/Enter.h \
     ../../../../plugins/components/Exit.h \
@@ -398,6 +403,7 @@ HEADERS += \
     ../../../../plugins/components/OLD_ODEelement.h \
     ../../../../plugins/components/PickStation.h \
     ../../../../plugins/components/PickUp.h \
+	../../../../plugins/components/Placc.h \
     ../../../../plugins/components/Process.h \
     ../../../../plugins/components/QueueableItem.h \
     ../../../../plugins/components/Record.h \
@@ -413,6 +419,7 @@ HEADERS += \
     ../../../../plugins/components/Stop.h \
     ../../../../plugins/components/Store.h \
     ../../../../plugins/components/Submodel.h \
+	../../../../plugins/components/Transition.h \
     ../../../../plugins/components/Unstore.h \
     ../../../../plugins/components/Write.h \
     ../../../../plugins/components/network/DefaultNode.h \
@@ -517,6 +524,7 @@ HEADERS += \
     ../../../terminal/examples/smarts/Smart_OnEvent.h \
     ../../../terminal/examples/smarts/Smart_Parser.h \
     ../../../terminal/examples/smarts/Smart_ParserModelFunctions.h \
+	../../../terminal/examples/smarts/Smart_PetriNet.h \
     ../../../terminal/examples/smarts/Smart_Plugin.h \
     ../../../terminal/examples/smarts/Smart_Process.h \
     ../../../terminal/examples/smarts/Smart_ProcessSet.h \
