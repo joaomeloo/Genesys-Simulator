@@ -14,7 +14,12 @@
 #pragma once
 
 #include "GenesysShell/GenesysShell.h"
+#include "examples/smarts/Smart_ExtendedFSM.h"
+#include "examples/smarts/Smart_CppForG.h"
+#include "examples/smarts/Smart_AssignWriteSeizes.h"
+#include "examples/smarts/Smart_EFSM_TrafficLight.h"
 #include "examples/smarts/Smart_DefaultModalModel.h"
+#include "examples/arenaSmarts/Smart_AssignExample.h"
 #include "examples/smarts/Smart_SeizeDelayRelease.h"
 #include "examples/smarts/Smart_SeizeDelayReleaseMany.h"
 
@@ -58,9 +63,11 @@ template <> struct TraitsTerminalApp<GenesysApplication_if> {
 	//typedef Smart_ProcessSet Application;
 	//typedef Smart_Record Application;
 	//typedef Smart_RouteStation Application;
+	//typedef Smart_ExtendedFSM Application;
+    typedef Smart_EFSM_TrafficLight Application;
     //typedef Smart_SeizeDelayRelease Application;
 	//typedef Smart_SeizeDelayReleaseNoDataDefs Application;
-    typedef Smart_SeizeDelayReleaseMany Application;
+    //typedef Smart_SeizeDelayReleaseMany Application;
 	//typedef Smart_Sequence Application;
 	//typedef Smart_SynchronizingParallelEntities Application;
 	//typedef Smart_SimulationControlResponse Application;

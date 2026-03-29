@@ -94,6 +94,9 @@ SOURCES += \
     ../../../../plugins/components/DummyComponent.cpp \
     ../../../../plugins/components/Enter.cpp \
     ../../../../plugins/components/Exit.cpp \
+	../../../../plugins/components/ExtendedFSMComponent.cpp \
+    ../../../../plugins/components/FSMState.cpp \
+	../../../../plugins/components/FSMTransition.cpp \
     ../../../../plugins/components/PickableStationItem.cpp \
     ../../../../plugins/components/SPICECircuit.cpp \
     ../../../../plugins/components/SPICENode.cpp \
@@ -123,6 +126,7 @@ SOURCES += \
     ../../../../plugins/components/Unstore.cpp \
     ../../../../plugins/components/Write.cpp \
     ../../../../plugins/components/network/DefaultNode.cpp \
+	../../../../plugins/components/tinyexpr/tinyexpr.c \
     ../../../../plugins/data/AssignmentItem.cpp \
     ../../../../plugins/data/CppCompiler.cpp \
     ../../../../plugins/data/DummyElement.cpp \
@@ -202,6 +206,7 @@ SOURCES += \
     ../../../terminal/examples/smarts/Smart_CppForG.cpp \
     ../../../terminal/examples/smarts/Smart_Delay.cpp \
     ../../../terminal/examples/smarts/Smart_Dummy.cpp \
+	../../../terminal/examples/smarts/Smart_EFSM_TrafficLight.cpp \
     ../../../terminal/examples/smarts/Smart_Failures.cpp \
     ../../../terminal/examples/smarts/Smart_HoldSearchRemove.cpp \
     ../../../terminal/examples/smarts/Smart_LSODE.cpp \
@@ -379,6 +384,9 @@ HEADERS += \
     ../../../../plugins/components/DummyComponent.h \
     ../../../../plugins/components/Enter.h \
     ../../../../plugins/components/Exit.h \
+	../../../../plugins/components/ExtendedFSMComponent.h \
+    ../../../../plugins/components/FSMState.h \
+	../../../../plugins/components/FSMTransition.h \
     ../../../../plugins/components/PickableStationItem.h \
     ../../../../plugins/components/SPICECircuit.h \
     ../../../../plugins/components/SPICENode.h \
@@ -408,6 +416,7 @@ HEADERS += \
     ../../../../plugins/components/Unstore.h \
     ../../../../plugins/components/Write.h \
     ../../../../plugins/components/network/DefaultNode.h \
+    ../../../../plugins/components/tinyexpr/tinyexpr.h \
     ../../../../plugins/data/AssignmentItem.h \
     ../../../../plugins/data/CppCompiler.h \
     ../../../../plugins/data/DummyElement.h \
@@ -497,6 +506,7 @@ HEADERS += \
     ../../../terminal/examples/smarts/Smart_DefaultModalModel.h \
     ../../../terminal/examples/smarts/Smart_Delay.h \
     ../../../terminal/examples/smarts/Smart_Dummy.h \
+	../../../terminal/examples/smarts/Smart_EFSM_TrafficLight.h \
     ../../../terminal/examples/smarts/Smart_Failures.h \
     ../../../terminal/examples/smarts/Smart_HoldSearchRemove.h \
     ../../../terminal/examples/smarts/Smart_LSODE.h \

@@ -1,13 +1,8 @@
 /*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/cppFiles/class.h to edit this template
- */
-
-/* 
- * File:   Smart_FinitStateMachine.h
- * Author: rlcancian
+ * Smart_ExtendedFSM.h
  *
- * Created on 7 de agosto de 2022, 12:26
+ * Created on: 2025.2
+ * Authors: André Rocco, Samantha Costa
  */
 
 #ifndef SMART_EXTENDEDFSM_H
@@ -17,10 +12,9 @@
 
 class Smart_ExtendedFSM : public BaseGenesysTerminalApplication {
 public:
-	Smart_ExtendedFSM();
+    Smart_ExtendedFSM();
 public:
-	virtual int main(int argc, char** argv);
+    virtual int main(int argc, char** argv);
 };
 
 #endif /* SMART_EXTENDEDFSM_H */
-

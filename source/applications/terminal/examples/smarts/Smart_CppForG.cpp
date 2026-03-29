@@ -40,8 +40,8 @@ int Smart_CppForG::main(int argc, char** argv) {
 	cpp2->getConnectionManager()->insert(dispose);
 	// set parameters for cpp1 and cpp2 components
 	std::string includeCode = "\
-        #include \"kernel/simulator/ModelSimulation.h\"\n\
-        #include \"kernel/simulator/ModelDataDefinition.h\"\n\
+        #include \"../../../../kernel/simulator/ModelSimulation.h\"\n\
+        #include \"../../../../kernel/simulator/ModelDataDefinition.h\"\n\
 ";
 	cpp1->setIncludesCode(includeCode);
 	cpp2->setIncludesCode(includeCode);

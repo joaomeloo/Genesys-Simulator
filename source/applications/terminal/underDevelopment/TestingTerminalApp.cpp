@@ -23,8 +23,8 @@ void TestingTerminalApp::Simulate(Simulator* genesys, Model* model, PluginManage
 	Create* create1 = plugins->newInstance<Create>(model);
 	Delay* delay1 = plugins->newInstance<Delay>(model);
 	Dispose* dispose1 = plugins->newInstance<Dispose>(model);
-	create1->getConnections()->insert(delay1);
-	delay1->getConnections()->insert(dispose1);
+	create1->getConnectionManager()->insert(delay1);
+	delay1->getConnectionManager()->insert(dispose1);
 	model->getSimulation()->start();
 	delete genesys;
 };

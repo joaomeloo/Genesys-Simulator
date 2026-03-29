@@ -33,6 +33,7 @@ public:
 public:
 	bool check(const std::string dynamicLibraryFilename);
 	Plugin* insert(const std::string dynamicLibraryFilename);
+	bool insert(Plugin* plugin);
 	bool remove(const std::string dynamicLibraryFilename);
 	bool remove(Plugin* plugin);
 	Plugin* find(std::string pluginTypeName);

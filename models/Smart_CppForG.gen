@@ -1,13 +1,15 @@
 # Genesys Simulation Model
 # Simulator, Model and Simulation infos
-0   Simulator  "GenESyS - GENeric and Expansible SYstem Simulator" versionNumber=220517 
+0   Simulator  "GenESyS - GENeric and Expansible SYstem Simulator" versionNumber=250823 
 0   ModelInfo  "Model 1" version="1.0" projectTitle="" description="" analystName="" 
 0   ModelSimulation "" traceLevel=9 showReportsAfterSimulation=0 showReportsAfterReplicaton=0 replicationLength=10.000000 
 
 # Model Data Definitions
-63  CppCompiler "CppForG_1.CppCompiler" 
+82  CppCompiler "CppForG_1.CppCompiler" 
+84  CppCompiler "CppForG_2.CppCompiler" 
 
 # Model Components
-61  Create     "Create_1" entityType="entitytype" nextId=62 
-62  CppForG    "CppForG_1" nextId=64 
-64  Dispose    "Dispose_1" nexts=0 
+80  Create     "Create_1" entityType="entitytype" nextId=81 
+81  CppForG    "CppForG_1" nextId=83 
+83  CppForG    "CppForG_2" nextId=85 
+85  Dispose    "Dispose_1" nexts=0 
