@@ -524,11 +524,35 @@
              </item>
             </layout>
            </widget>
-           <widget class="QWidget" name="TabReportsResults">
-            <attribute name="title">
-             <string>Results</string>
-            </attribute>
-           </widget>
+          <widget class="QWidget" name="TabReportsResults">
+           <attribute name="title">
+            <string>Results</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="verticalLayout_Results">
+            <item>
+             <widget class="QTextEdit" name="textEdit_Results">
+              <property name="font">
+               <font>
+                <family>Arial</family>
+                <pointsize>11</pointsize>
+               </font>
+              </property>
+              <property name="lineWrapMode">
+               <enum>QTextEdit::WidgetWidth</enum>
+              </property>
+              <property name="textInteractionFlags">
+               <set>Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse|Qt::TextEditable</set>
+              </property>
+              <property name="acceptRichText">
+               <bool>true</bool>
+              </property>
+              <property name="html">
+               <string></string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
            <widget class="QWidget" name="tabReportsPlots">
             <attribute name="title">
              <string>Plots</string>

@@ -46,6 +46,11 @@ void TraceManager::addTraceHandler(traceListener traceListener) {
 	this->_traceHandlers->insert(traceListener);
 }
 
+// Adiciona handler de resultados (função simples)
+void TraceManager::addTraceResultsHandler(traceListener traceResultsListener) {
+	this->_traceResultsHandlers->insert(traceResultsListener);
+}
+
 void TraceManager::addTraceSimulationHandler(traceSimulationListener traceSimulationListener) {
 	this->_traceSimulationHandlers->insert(traceSimulationListener);
 }
@@ -151,12 +156,21 @@ void TraceManager::traceSimulation(void* thisobject, double time, Entity* entity
 void TraceManager::traceReport(std::string text, TraceManager::Level level) {
 	if (_traceConditionPassed(level)) {
 		text = Util::Indent() + text;
-		TraceEvent e = TraceEvent(text, level);
-		for (std::list<traceListener>::iterator it = this->_traceReportHandlers->list()->begin(); it != _traceReportHandlers->list()->end(); it++) {
-			(*it)(e);
-		}
-		for (std::list<traceListenerMethod>::iterator it = this->_traceReportHandlersMethod->list()->begin(); it != _traceReportHandlersMethod->list()->end(); it++) {
-			(*it)(e);
+		TraceEvent e = TraceEvent(text, level);// Envia para os handlers de resultados se for L2_resultsHtml e não vazio
+		if (level == TraceManager::Level::L2_resultsHtml && !text.empty()) {
+			for (std::list<traceListener>::iterator it = this->_traceResultsHandlers->list()->begin(); it != _traceResultsHandlers->list()->end(); it++) {
+				(*it)(e);
+			}
+			for (std::list<traceListenerMethod>::iterator it = this->_traceResultsHandlersMethod->list()->begin(); it != _traceResultsHandlersMethod->list()->end(); it++) {
+				(*it)(e);
+			}
+		} else if (level == TraceManager::Level::L2_results && !text.empty()) {
+			for (std::list<traceListener>::iterator it = this->_traceReportHandlers->list()->begin(); it != _traceReportHandlers->list()->end(); it++) {
+				(*it)(e);
+			}
+			for (std::list<traceListenerMethod>::iterator it = this->_traceReportHandlersMethod->list()->begin(); it != _traceReportHandlersMethod->list()->end(); it++) {
+				(*it)(e);
+			}
 		}
 	}
 }

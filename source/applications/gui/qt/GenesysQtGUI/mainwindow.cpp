@@ -43,6 +43,14 @@
 #include <QDebug>
 #include <QRegularExpression>
 #include <QRandomGenerator>
+#include <QtCharts/QBarSeries>
+#include <QtCharts/QBarSet>
+#include <QtCharts/QChart>
+#include <QtCharts/QChartView>
+#include <QtCharts/QBarCategoryAxis>
+#include <QtCharts/QValueAxis>
+
+// using namespace QtCharts;
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
@@ -54,8 +62,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     simulator->getTraceManager()->addTraceErrorHandler<MainWindow>(this, &MainWindow::_simulatorTraceErrorHandler);
     simulator->getTraceManager()->addTraceReportHandler<MainWindow>(this, &MainWindow::_simulatorTraceReportsHandler);
     simulator->getTraceManager()->addTraceSimulationHandler<MainWindow>(this, &MainWindow::_simulatorTraceSimulationHandler);
+    simulator->getTraceManager()->addTraceResultsHandler<MainWindow>(this, &MainWindow::_simulatorTraceResultsHandler);
 
-	propertyGenesys = new PropertyEditorGenesys();
+    simulator->getPluginManager()->autoInsertPlugins(_autoLoadPluginsFilename.toStdString());
+    // now complete the information
+    for (unsigned int i = 0; i < simulator->getPluginManager()->size(); i++) {
+        //@TODO: now it's the opportunity to adjust template
+        _insertPluginUI(simulator->getPluginManager()->getAtRank(i));
+    }
+
+    propertyGenesys = new PropertyEditorGenesys();
     propertyList = new std::map<SimulationControl*, DataComponentProperty*>();
     propertyEditorUI = new std::map<SimulationControl*, DataComponentEditor*>();
     propertyBox = new std::map<SimulationControl*, ComboBoxEnum*>();
@@ -119,7 +135,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // ModelGraphic
     ui->graphicsView->setParentWidget(ui->centralwidget);
     ui->graphicsView->setSimulator(simulator);
-	ui->graphicsView->setPropertyEditor(propertyGenesys);
+    ui->graphicsView->setPropertyEditor(propertyGenesys);
     ui->graphicsView->setPropertyList(propertyList);
     ui->graphicsView->setPropertyEditorUI(propertyEditorUI);
     ui->graphicsView->setComboBox(propertyBox);
@@ -193,6 +209,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // finally
     _actualizeActions();
     //_actualizeTabPanes();
+    // Inicializa o Qt Charts para a aba Plots
+    // Substitui o gráfico simples pelo GraphicalReportManager
+    graphicalReportManager = new GraphicalReportManager(this);
+    graphicalReportManager->setSimulator(simulator);
+    
+    QWidget* graphicalReportWidget = graphicalReportManager->createGraphicalReportWidget();
+    
+    QVBoxLayout* layout = new QVBoxLayout(ui->tabReportsPlots);
+    layout->addWidget(graphicalReportWidget);
+    ui->tabReportsPlots->setLayout(layout);
 }
 
 MainWindow::~MainWindow() {
@@ -350,7 +376,6 @@ void MainWindow::_actualizeTabPanes() {
     }
 }
 
-
 void MainWindow::_actualizeSimulationEvents(SimulationEvent * re) {
     int row = ui->tableWidget_Simulation_Event->rowCount();
     ui->tableWidget_Simulation_Event->setRowCount(row + 1);
@@ -481,8 +506,6 @@ QColor MainWindow::myrgba(uint64_t color) {
     a = (color&0x000000FF);
     return QColor(r, g, b, a);
 }
-
-
 
 
 

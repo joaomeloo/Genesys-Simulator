@@ -6,10 +6,15 @@
 #include <QTreeWidgetItem>
 #include <QGraphicsItem>
 #include <QUndoView>
+#include <QtCharts/QChartView>
+#include <QtCharts/QChart>
+
+// using namespace QtCharts;
 
 #include "propertyeditor/DataComponentProperty.h"
 #include "propertyeditor/DataComponentEditor.h"
 #include "propertyeditor/ComboBoxEnum.h"
+#include "GraphicalReportManager.h"
 
 #include "../../../../kernel/simulator/Simulator.h"
 #include "../../../../kernel/simulator/PropertyGenesys.h"
@@ -29,16 +34,16 @@ class MainWindow : public QMainWindow {
 public:
 	MainWindow(QWidget *parent = nullptr);
 	~MainWindow();
-    ModelGraphicsScene* myScene() const;
+	ModelGraphicsScene* myScene() const;
 
 public: // to notify changes
 	bool graphicalModelHasChanged() const;
-    void setGraphicalModelHasChanged(bool graphicalModelHasChanged);
-    void unselectDrawIcons();
-    bool checkSelectedDrawIcons();
+	void setGraphicalModelHasChanged(bool graphicalModelHasChanged);
+	void unselectDrawIcons();
+	bool checkSelectedDrawIcons();
 
 private slots:
-    // actions
+	// actions
 	void on_actionEditUndo_triggered();
 	void on_actionEditRedo_triggered();
 	void on_actionEditFind_triggered();
@@ -49,18 +54,18 @@ private slots:
 	void on_actionEditDelete_triggered();
 	void on_actionEditGroup_triggered();
 	void on_actionEditUngroup_triggered();
-    void on_actionViewGroup_triggered();
-    void on_actionViewUngroup_triggered();
+	void on_actionViewGroup_triggered();
+	void on_actionViewUngroup_triggered();
 
-    void on_actionShowGrid_triggered();
+	void on_actionShowGrid_triggered();
 	void on_actionShowRule_triggered();
 	void on_actionShowGuides_triggered();
 	void on_actionViewConfigure_triggered();
 	void on_actionViewDarkMode_triggered();
 
-    void on_actionZoom_In_triggered();
-    void on_actionZoom_Out_triggered();
-    void on_actionZoom_All_triggered();
+	void on_actionZoom_In_triggered();
+	void on_actionZoom_Out_triggered();
+	void on_actionZoom_All_triggered();
 
 	void on_actionDrawLine_triggered();
 	void on_actionDrawRectangle_triggered();
@@ -105,7 +110,7 @@ private slots:
 	void on_actionToolsOptimizator_triggered();
 	void on_actionToolsDataAnalyzer_triggered();
 
-    void on_actionSimulatorsPluginManager_triggered();
+	void on_actionSimulatorsPluginManager_triggered();
 	void on_actionSimulatorExit_triggered();
 	void on_actionSimulatorPreferences_triggered();
 
@@ -120,7 +125,7 @@ private slots:
 	void on_actionComponent_Breakpoint_triggered();
 
 
-    // widget events
+	// widget events
 	//void on_textCodeEdit_Model_textChanged();
 	void on_tabWidget_Model_tabBarClicked(int index);
 	void on_tabWidget_Debug_currentChanged(int index);
@@ -150,29 +155,29 @@ private slots:
 	void on_graphicsView_rubberBandChanged(const QRect &viewportRect, const QPointF &fromScenePoint, const QPointF &toScenePoint);
 	void on_TextCodeEditor_textChanged();
 
-    void on_treeWidgetDataDefnitions_itemDoubleClicked(QTreeWidgetItem *item, int column);
-    void on_treeWidgetDataDefnitions_itemChanged(QTreeWidgetItem *item, int column);
-    void on_actionArranjeLeft_triggered();
-    void on_actionArranjeRight_triggered();
-    void on_actionArranjeTop_triggered();
-    void on_actionArranjeBototm_triggered();
-    void on_actionArranjeCenter_triggered();
-    void on_actionArranjeMiddle_triggered();
-    void on_actionShowSnap_triggered();
-    void on_actionGModelShowConnect_triggered();
+	void on_treeWidgetDataDefnitions_itemDoubleClicked(QTreeWidgetItem *item, int column);
+	void on_treeWidgetDataDefnitions_itemChanged(QTreeWidgetItem *item, int column);
+	void on_actionArranjeLeft_triggered();
+	void on_actionArranjeRight_triggered();
+	void on_actionArranjeTop_triggered();
+	void on_actionArranjeBototm_triggered();
+	void on_actionArranjeCenter_triggered();
+	void on_actionArranjeMiddle_triggered();
+	void on_actionShowSnap_triggered();
+	void on_actionGModelShowConnect_triggered();
 
-    void on_actionActivateGraphicalSimulation_triggered();
-    void on_horizontalSliderAnimationSpeed_valueChanged(int value);
-    void on_actionSelectAll_triggered();
+	void on_actionActivateGraphicalSimulation_triggered();
+	void on_horizontalSliderAnimationSpeed_valueChanged(int value);
+	void on_actionSelectAll_triggered();
 
-    void on_actionDiagrams_triggered();
+	void on_actionDiagrams_triggered();
 
-    void on_actionParallelization_triggered();
+	void on_actionParallelization_triggered();
 
-    void on_horizontalSlider_ZoomGraphical_actionTriggered(int action);
+	void on_horizontalSlider_ZoomGraphical_actionTriggered(int action);
 
 protected:
-    void closeEvent(QCloseEvent *event) override;
+	void closeEvent(QCloseEvent *event) override;
 
 private: // VIEW
 
@@ -181,6 +186,7 @@ private: // trace handlers
 	void _simulatorTraceErrorHandler(TraceErrorEvent e);
 	void _simulatorTraceSimulationHandler(TraceSimulationEvent e);
 	void _simulatorTraceReportsHandler(TraceEvent e);
+	void _simulatorTraceResultsHandler(TraceEvent e);
 private: // simulator event handlers
 	void _onModelCheckSuccessHandler(ModelEvent* re);
 	void _onReplicationStartHandler(SimulationEvent* re);
@@ -191,13 +197,13 @@ private: // simulator event handlers
 	void _onProcessEventHandler(SimulationEvent* re);
 	void _onEntityCreateHandler(SimulationEvent* re);
 	void _onEntityRemoveHandler(SimulationEvent* re);
-    void _onMoveEntityEvent(SimulationEvent * re);
-    void _onAfterProcessEvent(SimulationEvent * re);
+	void _onMoveEntityEvent(SimulationEvent * re);
+	void _onAfterProcessEvent(SimulationEvent * re);
 private: // model Graphics View handlers
-    void _onSceneMouseEvent(QGraphicsSceneMouseEvent* mouseEvent);
-    void _onSceneWheelInEvent();
-    void _onSceneWheelOutEvent();
-    void _onSceneGraphicalModelEvent(GraphicalModelEvent* event);
+	void _onSceneMouseEvent(QGraphicsSceneMouseEvent* mouseEvent);
+	void _onSceneWheelInEvent();
+	void _onSceneWheelOutEvent();
+	void _onSceneGraphicalModelEvent(GraphicalModelEvent* event);
 private: // QGraphicsScene Slots
 	void sceneChanged(const QList<QRectF> &region);
 	void sceneFocusItemChanged(QGraphicsItem *newFocusItem, QGraphicsItem *oldFocusItem, Qt::FocusReason reason);
@@ -220,7 +226,7 @@ private: // view
 	void _initModelGraphicsView();
 	void _initUiForNewModel(Model* m);
 	void _actualizeActions();
-    void _actualizeUndo();
+	void _actualizeUndo();
 	void _actualizeTabPanes();
 	void _actualizeModelSimLanguage();
 	void _actualizeModelTextHasChanged(bool hasChanged);
@@ -235,13 +241,13 @@ private: // view
 	void _clearModelEditors();
 	void _gentle_zoom(double factor);
 	void _showMessageNotImplemented();
-    void _recursivalyGenerateGraphicalModelFromModel(ModelComponent* component, List<ModelComponent*>* visited, std::map<ModelComponent*,GraphicalModelComponent*>* map, int *x, int *y, int *ymax, int sequenceInline);
+	void _recursivalyGenerateGraphicalModelFromModel(ModelComponent* component, List<ModelComponent*>* visited, std::map<ModelComponent*,GraphicalModelComponent*>* map, int *x, int *y, int *ymax, int sequenceInline);
 	void _generateGraphicalModelFromModel();
-    void saveItemForCopy(QList<GraphicalModelComponent*> * gmcList, QList<GraphicalConnection*> * connList);
+	void saveItemForCopy(QList<GraphicalModelComponent*> * gmcList, QList<GraphicalConnection*> * connList);
 	//bool _checkStartSimulation();
 private: // graphical model persistence
-    bool _saveGraphicalModel(QString filename);
-    bool _saveTextModel(QFile *saveFile, QString data);
+	bool _saveGraphicalModel(QString filename);
+	bool _saveTextModel(QFile *saveFile, QString data);
 	Model* _loadGraphicalModel(std::string filename);
 private: //???
 	void _helpCopy();
@@ -249,44 +255,44 @@ private: // interface and model main elements to join
 	Ui::MainWindow *ui;
 	Simulator* simulator;
 	PropertyEditorGenesys* propertyGenesys;
-    std::map<SimulationControl*, DataComponentProperty*>* propertyList;
-    std::map<SimulationControl*, DataComponentEditor*>* propertyEditorUI;
-    std::map<SimulationControl*, ComboBoxEnum*>* propertyBox;
+	std::map<SimulationControl*, DataComponentProperty*>* propertyList;
+	std::map<SimulationControl*, DataComponentEditor*>* propertyEditorUI;
+	std::map<SimulationControl*, ComboBoxEnum*>* propertyBox;
 private: // attributes to be saved and loaded withing the graphical model
 	int _zoomValue; // todo should be set for each open graphical model, such as view rect, etc
 private: // misc useful
-    bool _check(bool success = true);
+	bool _check(bool success = true);
 	bool _textModelHasChanged = false;
 	bool _graphicalModelHasChanged = false;
 	bool _modelWasOpened = false;
 	QString _autoLoadPluginsFilename = "autoloadplugins.txt";
-    bool _checkItemsScene();
+	bool _checkItemsScene();
 	QString _modelfilename;
 	std::map<std::string /*category*/,QColor>* _pluginCategoryColor = new std::map<std::string,QColor>();
 	QColor myrgba(uint64_t color); // TODO: Should NOT be here, but in UtilGUI.h, but then it generates multiple definitions error
-    static std::string dotColor(uint64_t color); // TODO: Should NOT be here, but in UtilGUI.h, but then it generates multiple definitions error
-    // TODO 1: Faz parte do mecanismo de restaurar dataDefinitions deletados do modelo e que são restaurados com um Control Z
-    // Caso: Ao adicionar um Create no modelo e dar um check() o EntityType será criado,
-    // mas ao deletar o Create, dar outro check() e em sequida dar um Control Z (voltando o Create no modelo) e checar novamente, o EntityType não é restaurado
-    // na lista de dataDefinitions do modelo, apesar de ainda existir no Create.
-    // Neste caso, ocorre um erro acusando que o EntityType do Create não está no modelo.
-    // Isso se dá ao fato de que no Kernel ele verifica se _entityType = nullptr para criar um novo e reinserir no modelo, mas não trata o caso dele não ser nullptr
-    // e não estar nos dataDefinitions do modelo, que é o que ocorre na situação que foi descrita.
-    // Esta função foi feita para tratar esse caso, assim como é feito com insertRestoredDataDefinitions e saveDataDefinitions em ModelGraphicScene
-    void setStatisticsCollector();
+	static std::string dotColor(uint64_t color); // TODO: Should NOT be here, but in UtilGUI.h, but then it generates multiple definitions error
+	// TODO 1: Faz parte do mecanismo de restaurar dataDefinitions deletados do modelo e que são restaurados com um Control Z
+	// Caso: Ao adicionar um Create no modelo e dar um check() o EntityType será criado,
+	// mas ao deletar o Create, dar outro check() e em sequida dar um Control Z (voltando o Create no modelo) e checar novamente, o EntityType não é restaurado
+	// na lista de dataDefinitions do modelo, apesar de ainda existir no Create.
+	// Neste caso, ocorre um erro acusando que o EntityType do Create não está no modelo.
+	// Isso se dá ao fato de que no Kernel ele verifica se _entityType = nullptr para criar um novo e reinserir no modelo, mas não trata o caso dele não ser nullptr
+	// e não estar nos dataDefinitions do modelo, que é o que ocorre na situação que foi descrita.
+	// Esta função foi feita para tratar esse caso, assim como é feito com insertRestoredDataDefinitions e saveDataDefinitions em ModelGraphicScene
+	void setStatisticsCollector();
 
-    bool _cut;
-    QList<GraphicalModelComponent*> * _gmc_copies  = new QList<GraphicalModelComponent*>();
-    QList<GraphicalConnection*> * _ports_copies = new QList<GraphicalConnection*>();
-    QList<QGraphicsItem *>  *_draw_copy = new QList<QGraphicsItem *>();
-    QList<QGraphicsItemGroup *>  *_group_copy = new QList<QGraphicsItemGroup *>();
+	bool _cut;
+	QList<GraphicalModelComponent*> * _gmc_copies  = new QList<GraphicalModelComponent*>();
+	QList<GraphicalConnection*> * _ports_copies = new QList<GraphicalConnection*>();
+	QList<QGraphicsItem *>  *_draw_copy = new QList<QGraphicsItem *>();
+	QList<QGraphicsItemGroup *>  *_group_copy = new QList<QGraphicsItemGroup *>();
 
-    struct COPY {
-        GraphicalModelComponent * old;
-        GraphicalModelComponent * copy;
-    };
+	struct COPY {
+		GraphicalModelComponent * old;
+		GraphicalModelComponent * copy;
+	};
 
-    bool _firstClickShowConnection = true;
+	bool _firstClickShowConnection = true;
 
 private:
 
@@ -312,10 +318,14 @@ private:
 		const int TabReportPlotIndex = 2;
 	} CONST;
 
-    QUndoView *undoView = nullptr;
-    bool _graphicalSimulation = false;
-    bool _modelCheked = false;
-    bool _loaded = false;
+	QUndoView *undoView = nullptr;
+	bool _graphicalSimulation = false;
+	bool _modelCheked = false;
+	bool _loaded = false;
 	//CodeEditor* textCodeEdit_Model;
+	QChartView* chartView = nullptr;
+	
+	// Novo gerenciador de relatórios gráficos
+	GraphicalReportManager* graphicalReportManager = nullptr;
 };
 #endif // MAINWINDOW_H

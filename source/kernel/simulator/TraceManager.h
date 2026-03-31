@@ -50,7 +50,8 @@ public:
 	enum class Level : int {
 		L0_noTraces = 0,
 		L1_errorFatal = 1,
-		L2_results = 2,
+		L2_results = 2,           // Resultados textuais
+		L2_resultsHtml = 1,      // Resultados em HTML (exclusivo para aba Results)
 		L3_errorRecover = 3, // or progress
 		L4_warning = 4,
 		L5_event = 5,
@@ -161,12 +162,22 @@ private: // trace listener
 	List<traceListener>* _traceHandlers = new List<traceListener>();
 	List<traceErrorListener>* _traceErrorHandlers = new List<traceErrorListener>();
 	List<traceListener>* _traceReportHandlers = new List<traceListener>();
+	List<traceListener>* _traceResultsHandlers = new List<traceListener>(); // Handlers para resultados
 	List<traceSimulationListener>* _traceSimulationHandlers = new List<traceSimulationListener>();
 	// for handlers that are class members (methods)
 	List<traceListenerMethod>* _traceHandlersMethod = new List<traceListenerMethod>();
 	List<traceErrorListenerMethod>* _traceErrorHandlersMethod = new List<traceErrorListenerMethod>();
 	List<traceListenerMethod>* _traceReportHandlersMethod = new List<traceListenerMethod>();
+	List<traceListenerMethod>* _traceResultsHandlersMethod = new List<traceListenerMethod>(); // Handlers para resultados (métodos)
 	List<traceSimulationListenerMethod>* _traceSimulationHandlersMethod = new List<traceSimulationListenerMethod>();
+public:
+	// Adiciona handler de resultados (função simples)
+	void addTraceResultsHandler(traceListener traceResultsListener);
+	// Adiciona handler de resultados (método de classe)
+	template<typename Class> void addTraceResultsHandler(Class * object, void (Class::*function)(TraceEvent));
+// Implementação do template para handler de resultados (método de classe)
+// Implementação do template para handler de resultados (método de classe)
+// (deixe apenas a declaração aqui, a implementação deve ficar fora da classe)
 private:
 	List<void*>* _traceSimulationExceptionRule = new List<void*>();
 private:
@@ -197,6 +208,11 @@ template<typename Class> void TraceManager::addTraceReportHandler(Class * object
 
 template<typename Class> void TraceManager::addTraceSimulationHandler(Class * object, void (Class::*function)(TraceSimulationEvent)) {
 	this->_traceSimulationHandlersMethod->insert(std::bind(function, object, std::placeholders::_1));
+}
+
+template<typename Class>
+void TraceManager::addTraceResultsHandler(Class * object, void (Class::*function)(TraceEvent)) {
+	this->_traceResultsHandlersMethod->insert(std::bind(function, object, std::placeholders::_1));
 }
 
 class TraceEvent {

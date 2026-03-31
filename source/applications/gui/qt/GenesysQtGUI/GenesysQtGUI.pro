@@ -1,6 +1,7 @@
 QT += core gui
 QT += printsupport
 QT += designer
+QT += charts
 greaterThan(QT_MAJOR_VERSION, 6): QT += widgets
 CONFIG += c++14
 
@@ -283,6 +284,7 @@ SOURCES += \
     graphicals/GraphicalImageAnimation.cpp \
     graphicals/GraphicalModelComponent.cpp \
     graphicals/GraphicalModelDataDefinition.cpp \
+    GraphicalReportManager.cpp \
     main.cpp \
     mainwindow.cpp \
     propertyeditor/qtpropertybrowser/qtbuttonpropertybrowser.cpp \
@@ -586,6 +588,7 @@ HEADERS += \
     graphicals/GraphicalImageAnimation.h \
     graphicals/GraphicalModelComponent.h \
     graphicals/GraphicalModelDataDefinition.h \
+    GraphicalReportManager.h \
     mainwindow.h \
     propertyeditor/qtpropertybrowser/QtAbstractEditorFactoryBase \
     propertyeditor/qtpropertybrowser/QtAbstractPropertyBrowser \

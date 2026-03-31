@@ -18,12 +18,9 @@ void MainWindow::_simulatorTraceHandler(TraceEvent e) {
     else if (e.getTracelevel() == TraceManager::Level::L4_warning)
         ui->textEdit_Console->setTextColor(QColor::fromRgb(128, 0, 0));
     else {
-        unsigned short grayVal = 20 * (static_cast<unsigned int> (e.getTracelevel()) - 5);
+        unsigned short grayVal = 20 * (static_cast<unsigned int> (e.getTracelevel()));// - 5);
         ui->textEdit_Console->setTextColor(QColor::fromRgb(grayVal, grayVal, grayVal));
     }
-    // set color based on words
-    // error, ... could not, unknown, ...
-    // show
     ui->textEdit_Console->append(QString::fromStdString(e.getText()));
     ui->textEdit_Console->moveCursor(QTextCursor::MoveOperation::End, QTextCursor::MoveMode::MoveAnchor);
     QCoreApplication::processEvents();
@@ -42,7 +39,7 @@ void MainWindow::_simulatorTraceSimulationHandler(TraceSimulationEvent e) {
     if (e.getText().find("Event {time=") != std::string::npos) {
         ui->textEdit_Simulation->setTextColor(QColor::fromRgb(0, 0, 128));
     } else {
-        unsigned short grayVal = 20 * (static_cast<unsigned int> (e.getTracelevel()) - 5);
+        unsigned short grayVal = 20 * (static_cast<unsigned int> (e.getTracelevel()));// - 5);
         ui->textEdit_Simulation->setTextColor(QColor::fromRgb(grayVal, grayVal, grayVal));
     }
     ui->textEdit_Simulation->append(QString::fromStdString(e.getText()));
@@ -51,8 +48,39 @@ void MainWindow::_simulatorTraceSimulationHandler(TraceSimulationEvent e) {
 
 void MainWindow::_simulatorTraceReportsHandler(TraceEvent e) {
 
-    std::cout << e.getText() << std::endl;
-    ui->textEdit_Reports->append(QString::fromStdString(e.getText()));
+    // Filtro: ignora mensagens HTML (usadas só na aba Results)
+    const std::string& msg = e.getText();
+    if (
+        (msg.rfind("<html", 0) == 0) ||
+        (msg.rfind("<!DOCTYPE html", 0) == 0)
+    ) {
+        // Não exibe HTML na aba Reports
+        return;
+    }
+    std::cout << msg << std::endl;
+    ui->textEdit_Reports->append(QString::fromStdString(msg));
+    QCoreApplication::processEvents();
+}
+
+
+// Handler para resultados (L2_results)
+void MainWindow::_simulatorTraceResultsHandler(TraceEvent e) {
+    // Exibe HTML se detectar, senão texto puro. Se HTML já estiver exibido, ignora texto puro subsequente.
+    const std::string& msg = e.getText();
+    static bool htmlMostrado = false;
+    if ((msg.rfind("<html", 0) == 0) || (msg.rfind("<!DOCTYPE html", 0) == 0)) {
+        std::cout << "[HTML] " << msg.substr(0, 80) << (msg.size() > 80 ? "..." : "") << std::endl;
+        ui->textEdit_Results->clear();
+        ui->textEdit_Results->setHtml(QString::fromStdString(msg));
+        htmlMostrado = true;
+    } else {
+        if (htmlMostrado) {
+            // Se já exibiu HTML, ignora texto puro subsequente
+            return;
+        }
+        std::cout << msg << std::endl;
+        ui->textEdit_Results->append(QString::fromStdString(msg));
+    }
     QCoreApplication::processEvents();
 }
 

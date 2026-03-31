@@ -1769,6 +1769,8 @@ bool ModelGraphicsScene::checkIgnoreEvent() {
         } else {
             return false;
         }
+    } else {
+        return false;
     }
 }
 void ModelGraphicsScene::mousePressEvent(QGraphicsSceneMouseEvent *mouseEvent) {

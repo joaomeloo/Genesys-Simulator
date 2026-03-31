@@ -153,7 +153,9 @@ bool Delay::_check(std::string& errorMessage) {
 }
 
 void Delay::_createInternalAndAttachedData() {
-	if (_reportStatistics && _cstatWaitTime == nullptr) {
+	_internalDataClear();
+	// @TODO remove StatisticsCollector needed in EntityType
+	if (_reportStatistics) {
 		_attachedAttributesInsert({"Entity.Total" + Util::StrAllocation(_allocation)+"Time"});
 		_cstatWaitTime = new StatisticsCollector(_parentModel, getName() + "." + "DelayTime", this);
 		_internalDataInsert("DelayTime", _cstatWaitTime);
@@ -165,9 +167,6 @@ void Delay::_createInternalAndAttachedData() {
 		//	if (modeldatum->isReportStatistics())
 		//		enttype->addGetStatisticsCollector(enttype->getName() + ".DelayTime");
 		//}
-	} else {
-		_internalDataClear();
-		// @TODO remove StatisticsCollector needed in EntityType
 	}
 }
 
