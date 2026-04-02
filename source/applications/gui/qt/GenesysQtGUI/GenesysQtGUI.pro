@@ -221,7 +221,6 @@ SOURCES += \
     ../../../terminal/examples/smarts/Smart_OnEvent.cpp \
     ../../../terminal/examples/smarts/Smart_Parser.cpp \
     ../../../terminal/examples/smarts/Smart_ParserModelFunctions.cpp \
-	../../../terminal/examples/smarts/Smart_PetriNet.cpp \
     ../../../terminal/examples/smarts/Smart_Plugin.cpp \
     ../../../terminal/examples/smarts/Smart_Process.cpp \
     ../../../terminal/examples/smarts/Smart_ProcessSet.cpp \
@@ -526,7 +525,6 @@ HEADERS += \
     ../../../terminal/examples/smarts/Smart_OnEvent.h \
     ../../../terminal/examples/smarts/Smart_Parser.h \
     ../../../terminal/examples/smarts/Smart_ParserModelFunctions.h \
-	../../../terminal/examples/smarts/Smart_PetriNet.h \
     ../../../terminal/examples/smarts/Smart_Plugin.h \
     ../../../terminal/examples/smarts/Smart_Process.h \
     ../../../terminal/examples/smarts/Smart_ProcessSet.h \
