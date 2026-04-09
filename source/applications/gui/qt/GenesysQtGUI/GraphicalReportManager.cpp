@@ -165,7 +165,7 @@ void GraphicalReportManager::setupUI() {
     
     currentChartView = new QChartView();
     currentChartView->setRenderHint(QPainter::Antialiasing);
-    currentChartView->setMinimumHeight(400);
+    currentChartView->setMinimumHeight(0);
     chartLayout->addWidget(currentChartView);
     
     chartTabWidget->addTab(chartTab, "Gráfico");

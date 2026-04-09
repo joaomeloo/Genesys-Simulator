@@ -17,10 +17,12 @@ if [[ $1 == "run_user_gui" ]]; then
     make -j6
     $GENESYS_ROOT/$GENESYS_GUI_SUBPATH_BIN
 elif [[ $1 == "run_user_shell" ]]; then
-    cp -a $GENESYS_ROOT/autoloadplugins.txt $GENESYS_ROOT/$GENESYS_NOGUI_SUBPATH
-    cd $GENESYS_ROOT/$GENESYS_NOGUI_SUBPATH
+    cp -a $GENESYS_ROOT/autoloadplugins.txt $GENESYS_ROOT/$GENESYS_GUI_SUBPATH
+    sed -i 's/runGraphicalUserInterface = true/runGraphicalUserInterface = false/g' $GENESYS_ROOT/source/applications/TraitsApp.h
+    cd $GENESYS_ROOT/$GENESYS_GUI_SUBPATH
+    qmake6
     make -j6
-    $GENESYS_ROOT/$GENESYS_NOGUI_SUBPATH_BIN
+    $GENESYS_ROOT/$GENESYS_GUI_SUBPATH_BIN
 elif [[ $1 == "run_developer_gui" ]]; then
     cp -a $GENESYS_ROOT/autoloadplugins.txt $GENESYS_ROOT/$GENESYS_GUI_SUBPATH
     /usr/bin/qtcreator $GENESYS_ROOT/$GENESYS_PROJECT_SUBPATH
