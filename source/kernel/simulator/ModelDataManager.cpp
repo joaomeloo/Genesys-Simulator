@@ -22,6 +22,18 @@ ModelDataManager::ModelDataManager(Model* model) {
 	_datadefinitions = new std::map<std::string, List<ModelDataDefinition*>*>();
 }
 
+// Releases per-type list containers and the map container itself; Model owns pointed data objects lifecycle.
+ModelDataManager::~ModelDataManager() {
+	if (_datadefinitions == nullptr) {
+		return;
+	}
+	for (auto& pair : *_datadefinitions) {
+		delete pair.second;
+	}
+	delete _datadefinitions;
+	_datadefinitions = nullptr;
+}
+
 bool ModelDataManager::insert(ModelDataDefinition * anElement) {
 	std::string datadefinitionTypename = anElement->getClassname();
 	return insert(datadefinitionTypename, anElement);
@@ -89,6 +101,10 @@ bool ModelDataManager::check(std::string datadefinitionTypename, ModelDataDefini
 
 void ModelDataManager::clear() {
 	_hasChanged = true;
+	// Deletes list containers before clearing the map to avoid leaking heap-allocated per-type lists.
+	for (auto& pair : *this->_datadefinitions) {
+		delete pair.second;
+	}
 	this->_datadefinitions->clear();
 }
 
@@ -112,18 +128,18 @@ void ModelDataManager::show() {
 	List<ModelDataDefinition*>* list;
 	Util::IncIndent();
 	{
-		for (std::map<std::string, List<ModelDataDefinition*>*>::iterator infraIt = _datadefinitions->begin(); infraIt != _datadefinitions->end(); infraIt++) {
-			key = (*infraIt).first;
-			list = (*infraIt).second;
-			_parentModel->getTracer()->trace(key + ": (" + std::to_string(list->size()) + ")");
-			Util::IncIndent();
-			{
-				for (std::list<ModelDataDefinition*>::iterator it = list->list()->begin(); it != list->list()->end(); it++) {
-					_parentModel->getTracer()->trace((*it)->show());
+			for (const auto& [typenameKey, definitions] : *_datadefinitions) {
+				key = typenameKey;
+				list = definitions;
+				_parentModel->getTracer()->trace(key + ": (" + std::to_string(list->size()) + ")");
+				Util::IncIndent();
+				{
+					for (ModelDataDefinition* modeldatum : *list->list()) {
+						_parentModel->getTracer()->trace(modeldatum->show());
+					}
 				}
+				Util::DecIndent();
 			}
-			Util::DecIndent();
-		}
 	}
 	Util::DecIndent();
 }
@@ -167,11 +183,11 @@ List<ModelDataDefinition*>* ModelDataManager::getDataDefinitionList(std::string 
 	return infras;
 }
 
-ModelDataDefinition * ModelDataManager::getDataDefinition(std::string datadefinitionTypename, Util::identification id) {
+	ModelDataDefinition * ModelDataManager::getDataDefinition(std::string datadefinitionTypename, Util::identification id) {
 	List<ModelDataDefinition*>* list = getDataDefinitionList(datadefinitionTypename);
-	for (std::list<ModelDataDefinition*>::iterator it = list->list()->begin(); it != list->list()->end(); it++) {
-		if ((*it)->getId() == id) { // found
-			return (*it);
+	for (ModelDataDefinition* modeldatum : *list->list()) {
+		if (modeldatum->getId() == id) { // found
+			return modeldatum;
 		}
 	}
 	return nullptr;
@@ -180,8 +196,8 @@ ModelDataDefinition * ModelDataManager::getDataDefinition(std::string datadefini
 int ModelDataManager::getRankOf(std::string datadefinitionTypename, std::string name) {
 	int rank = 0;
 	List<ModelDataDefinition*>* list = getDataDefinitionList(datadefinitionTypename);
-	for (std::list<ModelDataDefinition*>::iterator it = list->list()->begin(); it != list->list()->end(); it++) {
-		if ((*it)->getName() == name) { // found
+	for (ModelDataDefinition* modeldatum : *list->list()) {
+		if (modeldatum->getName() == name) { // found
 			return rank;
 		} else {
 			rank++;
@@ -190,10 +206,11 @@ int ModelDataManager::getRankOf(std::string datadefinitionTypename, std::string 
 	return -1;
 }
 
-std::list<std::string>* ModelDataManager::getDataDefinitionClassnames() const {
-	std::list<std::string>* keys = new std::list<std::string>();
-	for (std::map<std::string, List<ModelDataDefinition*>*>::iterator it = _datadefinitions->begin(); it != _datadefinitions->end(); it++) {
-		keys->insert(keys->end(), (*it).first);
+std::list<std::string> ModelDataManager::getDataDefinitionClassnames() const {
+	// Build and return a value snapshot with current class names, avoiding manual ownership by callers.
+	std::list<std::string> keys;
+	for (const auto& pair : *_datadefinitions) {
+		keys.push_back(pair.first);
 	}
 	return keys;
 }

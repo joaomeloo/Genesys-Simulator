@@ -6,7 +6,7 @@
 
 /*
  * File:   SimulationModel.cpp
- * Author: rafael.luiz.cancian
+ * Author: Prof. Rafael Luiz Cancian, Dr. Eng.
  *
  * Created on 21 de Junho de 2018, 15:01
  */
@@ -19,6 +19,7 @@
 #include <list>
 #include <fstream>
 #include <filesystem>
+#include <unordered_set>
 //#include <stdio.h>
 
 #include "SourceModelComponent.h"
@@ -38,14 +39,14 @@ Model::Model(Simulator* simulator, unsigned int level) {
 	_parentSimulator = simulator; // a simulator is the "parent" of a model
 	_level = level;
 	// for process analyser (create this lists before other component add any contyrol or response
-	_responses = new List<SimulationControl*>();
+	_responses = new List<SimulationResponse*>();
 	_controls = new List<SimulationControl*>();
 	// 1:1 associations (no Traits)
 	_traceManager = simulator->getTraceManager(); // every model starts with the same tracer, unless a specific one is set
 	_modelInfo = new ModelInfo();	//Sampler_if* sampler = new Traits<Sampler_if>::Implementation();
 
 	_eventManager = new OnEventManager(); // should be on .h (all that does not depends on THIS)
-	_modeldataManager = new ModelDataManager(this);
+    _modeldataManager = new ModelDataManager(this);
 	_componentManager = new ComponentManager(this);
 	_simulation = new ModelSimulation(this);
 	// 1:1 associations (Traits)
@@ -101,15 +102,72 @@ Model::Model(Simulator* simulator, unsigned int level) {
 
 }
 
+// Explicitly destroys model-owned runtime and manager infrastructure in a safe order.
+Model::~Model() {
+	// Releases pending heap events owned by the model calendar before managers are destroyed.
+	_destroyFutureEvents();
+	// Releases transient entity instances still alive in the model runtime list.
+	_destroyTransientEntities();
+	// Releases remaining components while letting component destructors update manager state.
+	_destroyComponents();
+	// Releases non-entity model data definitions that were not already released by components.
+	_destroyModelDataDefinitions();
+
+	// Destroys runtime services owned by Model (non-owned pointers are intentionally not deleted).
+	delete _simulation;
+	_simulation = nullptr;
+	delete _modelPersistence;
+	_modelPersistence = nullptr;
+	delete _modelChecker;
+	_modelChecker = nullptr;
+	delete _parser;
+	_parser = nullptr;
+
+	// Destroys infrastructure containers owned by Model after contained objects were released.
+	delete _futureEvents;
+	_futureEvents = nullptr;
+	delete _controls;
+	_controls = nullptr;
+	delete _responses;
+	_responses = nullptr;
+	delete _componentManager;
+	_componentManager = nullptr;
+    delete _modeldataManager;
+    _modeldataManager = nullptr;
+	delete _eventManager;
+	_eventManager = nullptr;
+	delete _modelInfo;
+	_modelInfo = nullptr;
+}
+
 void Model::sendEntityToComponent(Entity* entity, Connection* connection, double timeDelay) {
+	if (connection == nullptr) {
+		this->getTracer()->traceSimulation(this, TraceManager::Level::L3_errorRecover,
+				"Model::sendEntityToComponent skipped: null connection");
+		return;
+	}
+	if (connection->component == nullptr) {
+		this->getTracer()->traceSimulation(this, TraceManager::Level::L3_errorRecover,
+				"Model::sendEntityToComponent skipped: null destination component");
+		return;
+	}
 	this->sendEntityToComponent(entity, connection->component, timeDelay, connection->channel.portNumber);
 }
 
 void Model::sendEntityToComponent(Entity* entity, ModelComponent* component, double timeDelay, unsigned int componentinputPortNumber) {
-	SimulationEvent* se = _simulation->_createSimulationEvent();
+	auto se = _simulation->_createSimulationEvent();
 	se->setDestinationComponent(component);
 	se->setEntityMoveTimeDelay(timeDelay);
-    this->getOnEventManager()->NotifyEntityMoveHandlers(se); // it's my friend
+    // Log emitted move-event endpoints before notifying GUI/observer handlers.
+    ModelComponent* sourceComponent = (se->getCurrentEvent() != nullptr ? se->getCurrentEvent()->getComponent() : nullptr);
+    std::string sourceName = (sourceComponent != nullptr ? sourceComponent->getName() : "<null>");
+    std::string destinationName = (component != nullptr ? component->getName() : "<null>");
+    std::string message = "Entity move event emitted sourceId=" + std::to_string(sourceComponent != nullptr ? sourceComponent->getId() : 0)
+            + " sourceName=" + sourceName
+            + " destinationId=" + std::to_string(component != nullptr ? component->getId() : 0)
+            + " destinationName=" + destinationName;
+    this->getTracer()->traceSimulation(this, TraceManager::Level::L8_detailed, message);
+    this->getOnEventManager()->NotifyEntityMoveHandlers(se.get()); // it's my friend
 	Event* newEvent = new Event(this->getSimulation()->getSimulatedTime()+timeDelay, entity, component, componentinputPortNumber);
 	this->getFutureEvents()->insert(newEvent);
 }
@@ -173,7 +231,23 @@ void Model::checkReferencesToDataDefinitions(std::string expression, std::map<st
 	wrapper.clearReferedDataElements();
 	wrapper.parse_str(expression);
 	std::map<std::string, std::list<std::string>*>* refs = wrapper.getReferedDataElements();
-	referencedDataDefinitions->insert(refs->begin(), refs->end());
+	// Deep-copy referred element names so output map owns stable lists beyond parser wrapper lifetime.
+	for (const auto& typeAndNames : *refs) {
+		const std::string& typeName = typeAndNames.first;
+		const std::list<std::string>* sourceNames = typeAndNames.second;
+		if (sourceNames == nullptr) {
+			continue;
+		}
+		std::list<std::string>*& destinationNames = (*referencedDataDefinitions)[typeName];
+		if (destinationNames == nullptr) {
+			destinationNames = new std::list<std::string>();
+		}
+		for (const std::string& referencedName : *sourceNames) {
+			if (std::find(destinationNames->begin(), destinationNames->end(), referencedName) == destinationNames->end()) {
+				destinationNames->push_back(referencedName);
+			}
+		}
+	}
 	wrapper.setRegisterReferedDataElements(false);
 }
 
@@ -246,8 +320,9 @@ void Model::_showElements() const {
 	{
 		std::string elementType;
 		ModelDataDefinition* modeldatum;
-		std::list<std::string>* elementTypes = getDataManager()->getDataDefinitionClassnames();
-		for (std::list<std::string>::iterator typeIt = elementTypes->begin(); typeIt!=elementTypes->end(); typeIt++) {
+		// Iterate over a value snapshot of class names to avoid manual delete semantics.
+		std::list<std::string> elementTypes = getDataManager()->getDataDefinitionClassnames();
+		for (std::list<std::string>::iterator typeIt = elementTypes.begin(); typeIt!=elementTypes.end(); typeIt++) {
 			elementType = (*typeIt);
 			List<ModelDataDefinition*>* em = getDataManager()->getDataDefinitionList(elementType);
 			getTracer()->trace(elementType+":", TraceManager::Level::L2_results);
@@ -289,23 +364,96 @@ void Model::_showSimulationControls() const {
 void Model::_showSimulationResponses() const {
 	getTracer()->trace("Simulation Responses:", TraceManager::Level::L2_results);
 	Util::IncIndent();
-	for (SimulationControl* response : *_responses->list()) {
+	for (SimulationResponse* response : *_responses->list()) {
 		getTracer()->trace(response->show(), TraceManager::Level::L2_results); ////
 	}
 	Util::DecIndent();
 }
 
 void Model::clear() {
-	this->_componentManager->clear();
-	this->_modeldataManager->clear();
-	this->_futureEvents->clear();
+	// Clears and destroys pending runtime events to avoid leaking queued Event objects.
+	_destroyFutureEvents();
+	// Clears and destroys transient entities that may still exist between runs.
+	_destroyTransientEntities();
+	// Clears and destroys components currently owned by the model.
+	_destroyComponents();
+	// Clears and destroys remaining non-entity data definitions tracked by the model.
+	_destroyModelDataDefinitions();
 	Util::ResetAllIds();
 	//this->_simulation->clear();  // @TODO clear method
 	//this->_modelInfo->clear(); // @TODO clear method
 	//Util::ResetAllIds(); // @TODO: To implement
 }
 
-void Model::_createModelInternalElements() {
+// Iterates over the future event list and deletes each pending heap-allocated event.
+void Model::_destroyFutureEvents() {
+	if (_futureEvents == nullptr) {
+		return;
+	}
+	while (!_futureEvents->empty()) {
+		Event* event = _futureEvents->front();
+		_futureEvents->pop_front();
+		delete event;
+	}
+}
+
+// Iterates over the live entity list and deletes each transient heap-allocated entity.
+void Model::_destroyTransientEntities() {
+    if (_modeldataManager == nullptr) {
+		return;
+	}
+    List<ModelDataDefinition*>* entities = _modeldataManager->getDataDefinitionList(Util::TypeOf<Entity>());
+	while (entities != nullptr && !entities->empty()) {
+		ModelDataDefinition* data = entities->front();
+		Entity* entity = dynamic_cast<Entity*>(data);
+		if (entity == nullptr) {
+			entities->pop_front();
+			continue;
+		}
+		delete entity;
+	}
+}
+
+// Iterates over remaining components and deletes them so their destructors keep manager state consistent.
+void Model::_destroyComponents() {
+	if (_componentManager == nullptr) {
+		return;
+	}
+	while (_componentManager->getNumberOfComponents() > 0) {
+		ModelComponent* component = _componentManager->front();
+		if (component == nullptr) {
+			break;
+		}
+		delete component;
+	}
+}
+
+// Iteratively deletes non-entity data definitions without assuming stable collections during destruction.
+void Model::_destroyModelDataDefinitions() {
+    if (_modeldataManager == nullptr) {
+		return;
+	}
+	bool hasPendingNonEntity = true;
+	while (hasPendingNonEntity) {
+		hasPendingNonEntity = false;
+		// Re-evaluate the current class-name snapshot each pass while deleting non-entity data definitions.
+        std::list<std::string> types = _modeldataManager->getDataDefinitionClassnames();
+		for (const std::string& type : types) {
+			if (type == Util::TypeOf<Entity>()) {
+				continue;
+			}
+            List<ModelDataDefinition*>* datadefs = _modeldataManager->getDataDefinitionList(type);
+			if (datadefs != nullptr && !datadefs->empty()) {
+				hasPendingNonEntity = true;
+				ModelDataDefinition* data = datadefs->front();
+				delete data;
+				break;
+			}
+		}
+	}
+}
+
+void Model::createInternalDataDefinitions() {
 	if (!_automaticallyCreatesModelDataDefinitions) {
 		getTracer()->trace("Automatically creating internal elements disabled", TraceManager::Level::L7_internal);
 	} else {
@@ -320,31 +468,29 @@ void Model::_createModelInternalElements() {
 		}
 
 		std::list<ModelDataDefinition*>* modelElements;
-		unsigned int originalSize = getDataManager()->getDataDefinitionClassnames()->size(), pos = 1;
-		//for (std::list<std::string>::iterator itty = elements()->elementClassnames()->begin(); itty != elements()->elementClassnames()->end(); itty++) {
-		std::list<std::string>::iterator itty = getDataManager()->getDataDefinitionClassnames()->begin();
-		while (itty!=getDataManager()->getDataDefinitionClassnames()->end()&&pos<=originalSize) {
-			//try {
+		// Cache a value snapshot of class names and refresh it when dynamic insertions change the type registry.
+		std::list<std::string> elementTypes = getDataManager()->getDataDefinitionClassnames();
+		unsigned int originalSize = elementTypes.size(), pos = 1;
+		std::list<std::string>::iterator itty = elementTypes.begin();
+		while (itty!=elementTypes.end()&&pos<=originalSize) {
 			modelElements = getDataManager()->getDataDefinitionList((*itty))->list();
-			//} catch (const std::exception& e) {
-			// @TODO Is there a better solution to iterate over a changing sorted list??
-			// ops. Sorted list has changed and iteration fails. Starts iterating again
-			//	itty = elements()->elementClassnames()->begin();
-			//	modelElements = elements()->elementList((*itty))->list();
-			//	tracer()->trace(TraceManager::Level::L7_internal, "Creating internal elements");
-			//}
 			for (std::list<ModelDataDefinition*>::iterator itel = modelElements->begin(); itel!=modelElements->end(); itel++) {
 				getTracer()->trace("Internals for "+(*itel)->getClassname()+" \""+(*itel)->getName()+"\""); // (" + std::to_string(pos) + "/" + std::to_string(originalSize) + ")");
 				Util::IncIndent();
 				ModelDataDefinition::CreateInternalData((*itel));
 				Util::DecIndent();
 			}
-			if (originalSize==getDataManager()->getDataDefinitionClassnames()->size()) {
+			// Compare against a fresh value snapshot size to detect registry growth during internal-data creation.
+			std::list<std::string> currentTypes = getDataManager()->getDataDefinitionClassnames();
+			unsigned int currentSize = currentTypes.size();
+			if (originalSize==currentSize) {
 				itty++;
 				pos++;
 			} else {
-				originalSize = getDataManager()->getDataDefinitionClassnames()->size();
-				itty = getDataManager()->getDataDefinitionClassnames()->begin();
+				// Refresh the cached snapshot after dynamic insertions so iteration restarts from a coherent list.
+				elementTypes = getDataManager()->getDataDefinitionClassnames();
+				originalSize = elementTypes.size();
+				itty = elementTypes.begin();
 				pos = 1;
 				getTracer()->trace("Restarting to create internal elements (due to previous creations)", TraceManager::Level::L7_internal);
 			}
@@ -353,19 +499,94 @@ void Model::_createModelInternalElements() {
 	}
 }
 
+void Model::clearOrphanedDataDefinitions() {
+    //bool res = true;
+    _traceManager->trace("Checking Orphaned DataDefinitions", TraceManager::Level::L7_internal);
+    Util::IncIndent();
+    {
+        // Track orphan candidates by pointer identity to make pruning deterministic and iteration-safe.
+        std::unordered_set<ModelDataDefinition*> orphaned;
+        // Start by including all elements as orphaned
+        // Use a value snapshot of type names when enumerating initial orphan candidates.
+        std::list<std::string> allTypes = _modeldataManager->getDataDefinitionClassnames();
+        for (std::string ddtypename : allTypes) {
+            for (ModelDataDefinition* element : *_modeldataManager->getDataDefinitionList(ddtypename)->list()) {
+                orphaned.insert(element);
+            }
+        }
+        // Remove every referenced data definition from orphan candidates while preserving trace semantics.
+        auto removeReferenced = [&](ModelDataDefinition* owner) {
+            for (std::pair<std::string, ModelDataDefinition*> pairInternal : *owner->getInternalData()) {
+                ModelDataDefinition* mdd = pairInternal.second;
+                orphaned.erase(mdd);
+                _traceManager->trace("(" + owner->getClassname() + ") " + owner->getName() + " <#>--> " + "(" + mdd->getClassname() + ") " + mdd->getName());
+            }
+            for (std::pair<std::string, ModelDataDefinition*> pairAttached : *owner->getAttachedData()) {
+                ModelDataDefinition* mdd = pairAttached.second;
+                orphaned.erase(mdd);
+                _traceManager->trace("(" + owner->getClassname() + ") " + owner->getName() + " < >--> " + "(" + mdd->getClassname() + ") " + mdd->getName());
+            }
+        };
+        // ... by someone (ModelDataDefinition).
+        // Use another value snapshot because orphan pruning may observe changes made during checking.
+        std::list<std::string> referencedTypes = _modeldataManager->getDataDefinitionClassnames();
+        for (std::string ddtypename : referencedTypes) {
+            for (ModelDataDefinition* element : *_modeldataManager->getDataDefinitionList(ddtypename)->list()) {
+                removeReferenced(element);
+            }
+        }
+        // ... by someone (ModelComponent).
+        for (ModelComponent* component : *_componentManager->getAllComponents()) {
+            // Remove all component-owned references from orphan candidates before final deletion pass.
+            for (std::pair<std::string, ModelDataDefinition*> pairInternal : *component->getInternalData()) {
+                ModelDataDefinition* mdd = pairInternal.second;
+                orphaned.erase(mdd);
+                _traceManager->trace("(" + component->getClassname() + ") " + component->getName() + " <#>--> " + "(" + mdd->getClassname() + ") " + mdd->getName());
+            }
+            for (std::pair<std::string, ModelDataDefinition*> pairAttached : *component->getAttachedData()) {
+                ModelDataDefinition* mdd = pairAttached.second;
+                orphaned.erase(mdd);
+                _traceManager->trace("(" + component->getClassname() + ") " + component->getName() + " < >--> " + "(" + mdd->getClassname() + ") " + mdd->getName());
+            }
+        }
+        // every one in orphaned list now is really orphaned
+        if (orphaned.size() > 0) {
+            _traceManager->trace("Orphaned DataDefinitions found and will be removed:", TraceManager::Level::L7_internal);
+            Util::IncIndent();
+            {
+                for (ModelDataDefinition* orphanElem : orphaned) {
+                    _traceManager->trace("Orphan (" + orphanElem->getClassname() + ") " + orphanElem->getName() + "(id=" + std::to_string(orphanElem->getId()) + ") removed");
+                    _modeldataManager->remove(orphanElem);
+                }
+            }
+            Util::DecIndent();
+            // inoke again, recursivelly (removing some datadefinitions may create some other orphans)
+            Util::IncIndent();
+            {
+                clearOrphanedDataDefinitions();
+            }
+            Util::DecIndent();
+        } else {
+            _traceManager->trace("No orphaned DataDefinitions found", TraceManager::Level::L7_internal);
+        }
+    }
+    Util::DecIndent();
+}
+
 List<SimulationControl*>* Model::getControls() const {
 	return _controls;
 }
 
-List<SimulationControl*>* Model::getResponses() const {
+List<SimulationResponse*>* Model::getResponses() const {
 	return _responses;
 }
 
 bool Model::check() {
 	getTracer()->trace("Checking model consistency", TraceManager::Level::L7_internal);
 	Util::IncIndent();
-	// before checking the model, creates all necessary internal ModelDatas
-	_createModelInternalElements();
+    // before checking the model, creates all necessary internal ModelDatas and clear orphaned
+    createInternalDataDefinitions();
+    clearOrphanedDataDefinitions();
 	bool res = this->_modelChecker->checkAll();
 	Util::DecIndent();
 	if (res) {
@@ -385,15 +606,16 @@ bool Model::check() {
 Entity*Model::createEntity(std::string name, bool insertIntoModel) {
 	// Entity is my FRIEND, therefore Model can access it
 	Entity* newEntity = new Entity(this, name, true);
-	SimulationEvent *se = _simulation->_createSimulationEvent(); // it's my friend
+	auto se = _simulation->_createSimulationEvent(); // it's my friend
 	se->setEntityCreated(newEntity);
 	//getTracer()->traceSimulation(this, /*"Entity " + entId +*/entity->getName() + " was created");
-    getOnEventManager()->NotifyEntityCreateHandlers(se);
+    getOnEventManager()->NotifyEntityCreateHandlers(se.get());
 	return newEntity;
 }
 
 void Model::removeEntity(Entity*entity) {//, bool collectStatistics) {
-	this->_eventManager->NotifyEntityRemoveHandlers(_simulation->_createSimulationEvent()); // it's my friend
+	auto se = _simulation->_createSimulationEvent();
+	this->_eventManager->NotifyEntityRemoveHandlers(se.get()); // it's my friend
 	std::string entId = std::to_string(entity->entityNumber());
 	this->getDataManager()->remove(Util::TypeOf<Entity>(), entity);
 	getTracer()->traceSimulation(this, /*"Entity " + entId +*/entity->getName()+" was removed from the system");
@@ -430,10 +652,10 @@ unsigned int Model::getLevel() const {
 
 bool Model::hasChanged() const {
 	bool changed = _hasChanged;
-	changed &= this->_componentManager->hasChanged();
-	changed &= this->_modeldataManager->hasChanged();
-	changed &= this->_modelInfo->hasChanged();
-	changed &= this->_modelPersistence->hasChanged();
+	changed = changed || this->_componentManager->hasChanged();
+    changed = changed || this->_modeldataManager->hasChanged();
+	changed = changed || this->_modelInfo->hasChanged();
+	changed = changed || this->_modelPersistence->hasChanged();
 	return changed;
 }
 
@@ -446,7 +668,7 @@ OnEventManager*Model::getOnEventManager() const {
 }
 
 ModelDataManager*Model::getDataManager() const {
-	return _modeldataManager;
+    return _modeldataManager;
 }
 
 ModelInfo*Model::getInfos() const {
@@ -464,4 +686,3 @@ ModelSimulation*Model::getSimulation() const {
 Util::identification Model::getId() const {
 	return _id;
 }
-

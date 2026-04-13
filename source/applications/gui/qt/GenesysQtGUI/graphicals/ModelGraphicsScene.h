@@ -92,13 +92,16 @@ public:
 class ModelGraphicsScene : public QGraphicsScene {
 public:
     ModelGraphicsScene(qreal x, qreal y, qreal width, qreal height, QObject *parent = nullptr);
-    ModelGraphicsScene(const ModelGraphicsScene& orig);
+    // Disable copy construction to keep scene ownership state unique.
+    ModelGraphicsScene(const ModelGraphicsScene& orig) = delete;
+    // Disable copy assignment to prevent shallow copies of GUI-owned resources.
+    ModelGraphicsScene& operator=(const ModelGraphicsScene& other) = delete;
     virtual ~ModelGraphicsScene();
 public: // editing graphic model
     enum DrawingMode{
         NONE, LINE, TEXT, RECTANGLE, ELLIPSE, POLYGON,  POLYGON_POINTS, POLYGON_FINISHED, COUNTER, VARIABLE, TIMER
     };
-    GraphicalModelComponent* addGraphicalModelComponent(Plugin* plugin, ModelComponent* component, QPointF position, QColor color = Qt::blue, bool notify = false);
+    GraphicalModelComponent* addGraphicalModelComponent(Plugin* plugin, ModelComponent* component, QPointF position, QColor color = Qt::blue, bool notify = false, GraphicalModelComponent* autoConnectSource = nullptr);
     GraphicalConnection* addGraphicalConnection(GraphicalComponentPort* sourcePort, GraphicalComponentPort* destinationPort, unsigned int portSourceConnection, unsigned int portDestinationConnection, bool notify = false);
     GraphicalModelDataDefinition* addGraphicalModelDataDefinition(Plugin* plugin, ModelDataDefinition* element, QPointF position, QColor color = Qt::blue);
     GraphicalDiagramConnection* addGraphicalDiagramConnection(QGraphicsItem* dataDefinition, QGraphicsItem* linkedTo, GraphicalDiagramConnection::ConnectionType type);
@@ -125,6 +128,19 @@ public: // editing graphic model
     bool addDrawingAnimation(QGraphicsItem * item);
     void removeGraphicalModelDataDefinition(GraphicalModelDataDefinition* gmdd);
     void removeGraphicalDiagramConnection(GraphicalDiagramConnection* connection);
+    void clearGraphicalModelDataDefinitions();
+    void clearGraphicalDiagramConnections();
+    void sanitizeGraphicalDataDefinitionsBookkeeping();
+    void setDiagramLayerState(bool diagramCreated, bool visible);
+    // Return only items that can be directly manipulated by user edit commands.
+    QList<QGraphicsItem*> userOperableItems(const QList<QGraphicsItem*>& items) const;
+    // Filter out non-deletable items from user-triggered delete flows.
+    QList<QGraphicsItem*> userDeletableItems(const QList<QGraphicsItem*>& items) const;
+    // Keep internal data-definition initial grouping opt-in during model rebuild only.
+    void ensureInitialInternalDataDefinitionGrouping(GraphicalModelDataDefinition* dataDefinition, GraphicalModelComponent* component);
+    // Allow serializer to disable automatic initial grouping while persisted GUI state is being restored.
+    void setPersistedGuiRestoreInProgress(bool restoring);
+    bool isPersistedGuiRestoreInProgress() const;
     void removeDrawing(QGraphicsItem * item, bool notify = false);
     bool removeDrawingGeometry(QGraphicsItem * item);
     bool removeDrawingAnimation(QGraphicsItem * item);
@@ -136,7 +152,8 @@ public: // editing graphic model
     void ungroupComponents(bool notify = false);
     void ungroupModelComponents(QGraphicsItemGroup *group);
     void notifyGraphicalModelChange(GraphicalModelEvent::EventType eventType, GraphicalModelEvent::EventObjectType eventObjectType, QGraphicsItem *item);
-    QList<GraphicalModelComponent*>* graphicalModelComponentItems();
+    // Return model component items by value to avoid heap ownership transfer.
+    QList<GraphicalModelComponent*> graphicalModelComponentItems();
     GraphicalModelComponent* findGraphicalModelComponent(Util::identification id);
 public:
     struct GRID {
@@ -148,6 +165,10 @@ public:
     };
     GRID *grid();
     void showGrid();
+    // Aplica o estado visual do grid de forma determinística sem alternância implícita.
+    void setGridVisible(bool visible);
+    // Informa o estado visual atual do grid para sincronização com QAction.
+    bool isGridVisible() const;
     void snapItemsToGrid();
     void actualizeDiagramArrows();
     void showDiagrams();
@@ -166,6 +187,8 @@ public:
     void setPropertyEditorUI(std::map<SimulationControl*, DataComponentEditor*>* propEditorUI);
     void setComboBox(std::map<SimulationControl*, ComboBoxEnum*>* propCombo);
     void setObjectBeingDragged(QTreeWidgetItem* objectBeingDragged);
+    void setRestoringPersistedGuiLayout(bool restoring);
+    bool isRestoringPersistedGuiLayout() const;
     void setParentWidget(QWidget *parentWidget);
     unsigned short connectingStep() const;
     void setConnectingStep(unsigned short connectingStep);
@@ -209,6 +232,11 @@ public:
     void insertRestoredDataDefinitions(bool loaded);
     void saveDataDefinitions();
     // --------------------------------- //
+    void requestGraphicalDataDefinitionsSync();
+    void scheduleGraphicalDataDefinitionsSync();
+    bool isGraphicalDataDefinitionsSyncInProgress() const;
+    void setConnectionGeometryUpdatesBlocked(bool blocked);
+    bool areConnectionGeometryUpdatesBlocked() const;
 
 public:
     QList<QGraphicsItem*>*getGraphicalModelDataDefinitions() const;
@@ -251,6 +279,11 @@ protected: // virtual functions
     virtual void wheelEvent(QGraphicsSceneWheelEvent *wheelEvent);
 
 private:
+    bool tryCreateConnection(GraphicalComponentPort* source, GraphicalComponentPort* destination, bool notify = true);
+    GraphicalComponentPort* firstAvailableOutputPort(GraphicalModelComponent* component) const;
+    GraphicalComponentPort* firstInputPort(GraphicalModelComponent* component) const;
+    void resetConnectingState();
+private:
     GRID _grid;
     Simulator* _simulator = nullptr;
     PropertyEditorGenesys* _propertyEditor = nullptr;
@@ -258,7 +291,8 @@ private:
     std::map<SimulationControl*, DataComponentEditor*>* _propertyEditorUI = nullptr;
     std::map<SimulationControl*, ComboBoxEnum*>* _propertyBox = nullptr;
     QTreeWidgetItem* _objectBeingDragged = nullptr;
-    QWidget* _parentWidget;
+    // Initialize the parent widget pointer to a known null state.
+    QWidget* _parentWidget = nullptr;
     QList<GraphicalModelComponent*> _allGraphicalModelComponents;
     QList<GraphicalConnection*> _allGraphicalConnections;
     QList<GraphicalModelDataDefinition*> _allGraphicalModelDataDefinitions;
@@ -280,14 +314,20 @@ private:
     bool _drawing = false;
     bool _diagram = false;
     bool _visibleDiagram = false;
+    bool _persistedGuiRestoreInProgress = false;
     unsigned short _connectingStep = 0; //0:nothing, 1:waiting click on source or destination, 2: click on source, 3: click on destination
     bool _controlIsPressed = false;
     bool _snapToGrid = false;
-    GraphicalComponentPort* _sourceGraphicalComponentPort;
-    GraphicalComponentPort* _destinationGraphicalComponentPort;
-    AnimationCounter *_currentCounter;
-    AnimationVariable *_currentVariable;
-    AnimationTimer *_currentTimer;
+    // Initialize the source port pointer before connection drawing starts.
+    GraphicalComponentPort* _sourceGraphicalComponentPort = nullptr;
+    // Initialize the destination port pointer before connection drawing starts.
+    GraphicalComponentPort* _destinationGraphicalComponentPort = nullptr;
+    // Initialize the current counter drawing pointer to avoid indeterminate access.
+    AnimationCounter *_currentCounter = nullptr;
+    // Initialize the current variable drawing pointer to avoid indeterminate access.
+    AnimationVariable *_currentVariable = nullptr;
+    // Initialize the current timer drawing pointer to avoid indeterminate access.
+    AnimationTimer *_currentTimer = nullptr;
     QMap<Event *, QList<AnimationTransition *> *> *_animationPaused = new QMap<Event *, QList<AnimationTransition *> *>();
 
 private:
@@ -307,7 +347,10 @@ private:
     QList<QGraphicsItem*>* _graphicalAnimations = new QList<QGraphicsItem*>();
     QList<QGraphicsItem*>* _graphicalEntities = new QList<QGraphicsItem*>();
     QList<QGraphicsItemGroup*>* _graphicalGroups = new QList<QGraphicsItemGroup*>();
+    bool _restoringPersistedGuiLayout = false;
+    bool _graphicalDataDefinitionsSyncPending = false;
+    bool _graphicalDataDefinitionsSyncInProgress = false;
+    bool _connectionGeometryUpdatesBlocked = false;
 };
 
 #endif /* MODELGRAPHICSSCENE_H */
-

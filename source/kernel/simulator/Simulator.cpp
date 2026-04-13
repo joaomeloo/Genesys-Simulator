@@ -47,10 +47,29 @@ Simulator::Simulator() {
 	_pluginManager = new PluginManager(this);
 	_modelManager = new ModelManager(this);
 	_traceManager = new TraceManager(this);
+	_parserManager = new ParserManager();
 	_experimentManager = new ExperimentManager(this);
 	std::cout << '|' << '\t' << _licenceManager->showLicence() << std::endl;
     std::cout << '|' << '\t' << _licenceManager->showActivationCode() << std::endl;
     std::cout << '|' << '\t' << _licenceManager->showLimits() << std::endl;
+}
+
+
+Simulator::~Simulator() {
+	// Keep teardown deterministic and avoid dangling manager pointers after deletion.
+	delete _experimentManager;
+	_experimentManager = nullptr;
+	delete _parserManager;
+	_parserManager = nullptr;
+	// Destroy models before tracing infrastructure to avoid late traces using a dead tracer.
+	delete _modelManager;
+	_modelManager = nullptr;
+	delete _traceManager;
+	_traceManager = nullptr;
+	delete _pluginManager;
+	_pluginManager = nullptr;
+	delete _licenceManager;
+	_licenceManager = nullptr;
 }
 
 PluginManager* Simulator::getPluginManager() const {
@@ -89,11 +108,13 @@ LicenceManager* Simulator::getLicenceManager() const {
 	return _licenceManager;
 }
 
-bool Simulator::_completePluginsFieldsAndTemplate() {
+List<Plugin*>* Simulator::_completePluginsFieldsAndTemplate() {
+	//* TODO: NOT THRE RIGHT PLACE TO BE *//
 	TraceManager::Level savedTraceLevel = _traceManager->getTraceLevel();
 	// this crap stuff should not been shown
 	_traceManager->trace("Completing plugins and templates", TraceManager::Level::L8_detailed);
 	_traceManager->setTraceLevel(TraceManager::Level::L0_noTraces); // this crap stuff should not been shown
+	List<Plugin*>* completedPlugins = new List<Plugin*>();
 	Model* tempModel = new Model(this);
 	tempModel->getPersistence()->setOption(ModelPersistence_if::Options::SAVEDEFAULTS, true);
 	auto fields = std::make_unique<PersistenceRecord>(*tempModel->getPersistence());
@@ -136,12 +157,12 @@ bool Simulator::_completePluginsFieldsAndTemplate() {
 					std::string templateLanguage = tempModel->getPersistence()->getFormatedField(fields.get());
 					info->setLanguageTemplate(templateLanguage);
 				}
+				completedPlugins->insert(plugin);
 			}
 		} catch (...) {
-			result = false;
 		}
 	}
 	Util::ResetAllIds();
 	_traceManager->setTraceLevel(savedTraceLevel);
-	return result;
+	return completedPlugins;
 }

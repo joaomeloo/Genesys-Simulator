@@ -56,13 +56,13 @@ Type is Entity Picture.
 class Set : public ModelDataDefinition {
 public:
 	Set(Model* model, std::string name = "");
-	virtual ~Set() = default;
+	virtual ~Set() override;
 public: // static
 	static ModelDataDefinition* LoadInstance(Model* model, PersistenceRecord *fields);
 	static PluginInformation* GetPluginInformation();
 	static ModelDataDefinition* NewInstance(Model* model, std::string name = "");
 public:
-	virtual std::string show();
+	virtual std::string show() override;
 public:
 	void setSetOfType(std::string _setOfType);
 	std::string getSetOfType() const;
@@ -72,12 +72,12 @@ public:
 	void removeElementSet(ModelDataDefinition* element);
 
 protected: // must be overriden 
-	virtual bool _loadInstance(PersistenceRecord *fields);
-	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues);
+	virtual bool _loadInstance(PersistenceRecord *fields) override;
+	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues) override;
 protected: // could be overriden 
-	virtual bool _check(std::string& errorMessage);
-	virtual ParserChangesInformation* _getParserChangesInformation();
-    virtual void _createInternalAndAttachedData(); 
+	virtual bool _check(std::string& errorMessage) override;
+	virtual ParserChangesInformation* _getParserChangesInformation() override;
+    virtual void _createInternalAndAttachedData() override;
 private:
 	//ElementManager* _elems;
 
@@ -90,4 +90,3 @@ private:
 };
 
 #endif /* SET_H */
-

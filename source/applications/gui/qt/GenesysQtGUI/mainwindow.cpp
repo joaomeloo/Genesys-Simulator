@@ -1,3 +1,13 @@
+// Document this compilation unit as the MainWindow composition-root partition.
+/**
+ * @file mainwindow.cpp
+ * @brief Composition-root partition of MainWindow implementation.
+ *
+ * This file contains central MainWindow construction, initialization, and wiring logic,
+ * including creation of extracted controllers/services and baseline UI setup. It does not
+ * define a new class; it is a physical partition of the same MainWindow implementation used
+ * as a compatibility façade in the incremental refactoring.
+ */
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
@@ -5,11 +15,38 @@
 // Kernel
 #include "../../../../kernel/simulator/SinkModelComponent.h"
 #include "../../../../kernel/simulator/Attribute.h"
+#include "../../../../kernel/simulator/Counter.h"
+#include "../../../../kernel/simulator/StatisticsCollector.h"
 #include "../../../TraitsApp.h"
 // GUI
 #include "graphicals/ModelGraphicsScene.h"
 #include "TraitsGUI.h"
 #include "graphicals/GraphicalConnection.h"
+#include "controllers/SimulationController.h"
+// Keep explicit controller includes to make MainWindow composition-root wiring clear.
+#include "controllers/ModelInspectorController.h"
+#include "controllers/TraceConsoleController.h"
+#include "controllers/SimulationEventController.h"
+// Add Phase 5 controller include for plugin-catalog responsibilities.
+#include "controllers/PluginCatalogController.h"
+// Add Phase 6 controller include for property-editor and scene-selection orchestration.
+#include "controllers/PropertyEditorController.h"
+// Add Phase 7 controller include for model/application lifecycle orchestration.
+#include "controllers/ModelLifecycleController.h"
+// Add Phase 8 controller include for simulation-command orchestration.
+#include "controllers/SimulationCommandController.h"
+// Add Phase 9 controller include for edit-command orchestration.
+#include "controllers/EditCommandController.h"
+// Add Phase 10 controller include for scene/view/drawing command orchestration.
+#include "controllers/SceneToolController.h"
+// Add Phase 11 controller include for dialog/utility orchestration.
+#include "controllers/DialogUtilityController.h"
+#include "services/ModelLanguageSynchronizer.h"
+#include "services/GraphvizModelExporter.h"
+#include "services/CppModelExporter.h"
+#include "services/GraphicalModelSerializer.h"
+#include "services/GraphicalModelBuilder.h"
+#include "UtilGUI.h"
 // PropEditor
 #include "propertyeditor/qtpropertybrowser/qttreepropertybrowser.h"
 #include "animations/AnimationVariable.h"
@@ -28,7 +65,6 @@
 #include <QMessageBox>
 #include <QTextStream>
 #include <QFileDialog>
-#include <QGraphicsScene>
 #include <QDateTime>
 #include <QEventLoop>
 #include <QTemporaryFile>
@@ -37,12 +73,12 @@
 #include <QPropertyAnimation>
 // #include <qt5/QtWidgets/qgraphicsitem.h>
 #include <QtWidgets/qgraphicsitem.h>
-#include <QGraphicsScene>
 //#include <QDesktopWidget> //removed from qt6
 #include <QScreen>
 #include <QDebug>
 #include <QRegularExpression>
 #include <QRandomGenerator>
+#include <QAction>
 #include <QtCharts/QBarSeries>
 #include <QtCharts/QBarSet>
 #include <QtCharts/QChart>
@@ -54,9 +90,30 @@
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
+    // Keep plugins tree as drag source only (never a drop target).
+    ui->treeWidget_Plugins->setDragDropMode(QAbstractItemView::DragOnly);
+    ui->treeWidget_Plugins->setAcceptDrops(false);
+    ui->treeWidget_Plugins->viewport()->setAcceptDrops(false);
+    ui->treeWidget_Plugins->setDropIndicatorShown(false);
     //
     // Genesys Simulator
     simulator = new Simulator();
+    _simulationController = std::make_unique<SimulationController>(this, simulator);
+    // This block initializes phase-1 service objects used for progressive delegation from MainWindow.
+    _modelLanguageSynchronizer = std::make_unique<ModelLanguageSynchronizer>(simulator, ui->TextCodeEditor, &_textModelHasChanged, this, [this]() {
+        // Keep event-handler ownership in MainWindow while delegating model-language synchronization.
+        _setOnEventHandlers();
+    });
+    // Keep Graphviz exporter dependencies explicit to avoid broad MainWindow coupling.
+    _graphvizModelExporter = std::make_unique<GraphvizModelExporter>(simulator,
+                                                                     ui->label_ModelGraphic,
+                                                                     ui->checkBox_ShowInternals,
+                                                                     ui->checkBox_ShowElements,
+                                                                     ui->checkBox_ShowRecursive,
+                                                                     ui->checkBox_ShowLevels,
+                                                                     // Keep synchronization behavior unchanged via a narrow callback dependency.
+                                                                     [this]() { return this->_setSimulationModelBasedOnText(); });
+    _cppModelExporter = std::make_unique<CppModelExporter>(simulator, ui->plainTextEditCppCode);
     simulator->getTraceManager()->setTraceLevel(TraitsApp<GenesysApplication_if>::traceLevel);
     simulator->getTraceManager()->addTraceHandler<MainWindow>(this, &MainWindow::_simulatorTraceHandler);
     simulator->getTraceManager()->addTraceErrorHandler<MainWindow>(this, &MainWindow::_simulatorTraceErrorHandler);
@@ -116,6 +173,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     headers << tr("Number") << tr("Name") << tr("Type"); // << and each attribute as a column
     ui->tableWidget_Entities->setHorizontalHeaderLabels(headers);
     ui->tableWidget_Entities->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    _prepareReportsResultsTable();
     ui->tableWidget_Simulation_Event->setContentsMargins(1, 0, 1, 0);
     //
     // Trees
@@ -171,9 +229,164 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     //
     // graphicsView
     _initModelGraphicsView();
+    // Initialize the Phase 3 model-inspector controller after view and simulator dependencies are ready.
+    _modelInspectorController = std::make_unique<ModelInspectorController>(simulator,
+                                                                           ui->treeWidgetComponents,
+                                                                           ui->treeWidgetDataDefnitions,
+                                                                           ui->graphicsView);
+    // Initialize the Phase 4 trace controller after trace output widgets are available.
+    _traceConsoleController = std::make_unique<TraceConsoleController>(ui->textEdit_Console,
+                                                                        ui->textEdit_Simulation,
+                                                                        ui->textEdit_Reports);
+    // Initialize the Phase 4 simulation-event controller after simulator and scene dependencies are available.
+    _simulationEventController = std::make_unique<SimulationEventController>(
+        simulator,
+        ui->graphicsView->getScene(),
+        ui->graphicsView,
+        ui->label_ReplicationNum,
+        ui->progressBarSimulation,
+        ui->tableWidget_Simulation_Event,
+        ui->tableWidget_Entities,
+        ui->tableWidget_Variables,
+        ui->textEdit_Simulation,
+        ui->textEdit_Reports,
+        ui->tabWidgetCentral,
+        ui->actionActivateGraphicalSimulation,
+        &_modelCheked,
+        CONST.TabCentralReportsIndex,
+        SimulationEventController::Callbacks{
+            [this]() { _actualizeActions(); },
+            [this](SimulationEvent* re) { _actualizeSimulationEvents(re); },
+            [this](bool force) { _actualizeDebugEntities(force); },
+            [this](bool force) { _actualizeDebugVariables(force); },
+            [this](SimulationEvent* re) { _actualizeGraphicalModel(re); }});
+    // Initialize the Phase 5 plugin-catalog controller after simulator and plugin-tree dependencies are ready.
+    _pluginCatalogController = std::make_unique<PluginCatalogController>(simulator,
+                                                                         ui->treeWidget_Plugins,
+                                                                         ui->TextCodeEditor,
+                                                                         _pluginCategoryColor);
+    // Initialize Phase 2 services using narrow dependencies and compatibility callbacks.
+    _graphicalModelBuilder = std::make_unique<GraphicalModelBuilder>(simulator,
+                                                                      ui->graphicsView,
+                                                                      ui->graphicsView->getScene(),
+                                                                      _pluginCategoryColor,
+                                                                      ui->textEdit_Console);
+    // Keep MainWindow wrappers while delegating persistence and loading logic to Phase 2 service.
+    _graphicalModelSerializer = std::make_unique<GraphicalModelSerializer>(simulator,
+                                                                            this,
+                                                                            ui->TextCodeEditor,
+                                                                            ui->graphicsView,
+                                                                            ui->horizontalSlider_ZoomGraphical,
+                                                                            ui->actionShowGrid,
+                                                                            ui->actionShowRule,
+                                                                            ui->actionShowSnap,
+                                                                            ui->actionShowGuides,
+                                                                            ui->actionShowInternalElements,
+                                                                            ui->actionShowAttachedElements,
+                                                                            ui->actionDiagrams,
+                                                                            ui->textEdit_Console,
+                                                                            &_modelfilename,
+                                                                            [this]() { _clearModelEditors(); },
+                                                                            [this]() { _generateGraphicalModelFromModel(); },
+                                                                            [this]() { on_actionShowInternalElements_triggered(); },
+                                                                            [this]() { on_actionShowAttachedElements_triggered(); },
+                                                                            [this]() { on_actionDiagrams_triggered(); });
     //
     // property editor
     ui->treeViewPropertyEditor->setAlternatingRowColors(true);
+    // Initialize the Phase 6 property-editor controller after view/editor dependencies are available.
+    _propertyEditorController = std::make_unique<PropertyEditorController>(
+        ui->treeViewPropertyEditor,
+        ui->graphicsView,
+        propertyGenesys,
+        propertyList,
+        propertyEditorUI,
+        propertyBox,
+        [this]() { _actualizeModelSimLanguage(); },
+        [this](bool force) { _actualizeModelComponents(force); },
+        [this](bool force) { _actualizeModelDataDefinitions(force); },
+        [this]() { _actualizeModelCppCode(); },
+        [this]() { return _createModelImage(); },
+        [this]() { _actualizeTabPanes(); },
+        [this]() { _actualizeActions(); });
+    // Keep callback wiring in MainWindow while delegating behavior to the Phase 6 controller.
+    ui->treeViewPropertyEditor->setModelChangedCallback([this]() {
+        this->_onPropertyEditorModelChanged();
+    });
+    // Initialize the Phase 8 simulation-command controller after simulation controller and callbacks are available.
+    _simulationCommandController = std::make_unique<SimulationCommandController>(
+        _simulationController.get(),
+        [this](const std::string& command) { _insertCommandInConsole(command); },
+        [this]() { _actualizeActions(); },
+        [this]() { return _check(false); },
+        [this]() { return _setSimulationModelBasedOnText(); });
+    // Initialize the Phase 9 edit-command controller after scene and copy-buffer dependencies are available.
+    _editCommandController = std::make_unique<EditCommandController>(
+        simulator,
+        ui->graphicsView,
+        [this]() { _actualizeActions(); },
+        &_cut,
+        &_gmc_copies,
+        &_ports_copies,
+        &_draw_copy,
+        &_group_copy);
+
+    // Initialize the Phase 10 scene-tool controller after scene/view widgets and callbacks are ready.
+    _sceneToolController = std::make_unique<SceneToolController>(
+        ui->graphicsView,
+        ui,
+        [this]() { return ui->graphicsView->getScene(); },
+        [this]() { return _createModelImage(); },
+        [this]() { unselectDrawIcons(); },
+        [this]() { return checkSelectedDrawIcons(); },
+        [this](double factor) { _gentle_zoom(factor); },
+        [this]() { _actualizeActions(); },
+        [this]() { _actualizeTabPanes(); },
+        _zoomValue,
+        _firstClickShowConnection);
+
+    // Initialize the Phase 11 dialog-utility controller after UI/simulator dependencies and callbacks are ready.
+    _dialogUtilityController = std::make_unique<DialogUtilityController>(
+        this,
+        simulator,
+        ui,
+        ui->graphicsView,
+        [this]() { _showMessageNotImplemented(); },
+        [this](bool force) { _actualizeDebugBreakpoints(force); },
+        [this]() { return _createModelImage(); },
+        [this]() { _actualizeActions(); },
+        [this]() { _actualizeTabPanes(); },
+        [this]() { return myScene(); },
+        _optimizerPrecision,
+        _optimizerMaxSteps,
+        _parallelizationEnabled,
+        _parallelizationThreads,
+        _parallelizationBatchSize,
+        _lastDataAnalyzerPath);
+
+    // Initialize the Phase 7 model-lifecycle controller after simulator/UI/callback dependencies are ready.
+    _modelLifecycleController = std::make_unique<ModelLifecycleController>(
+        this,
+        simulator,
+        ui,
+        &_modelfilename,
+        &_textModelHasChanged,
+        &_closingApproved,
+        &_loaded,
+        ModelLifecycleController::Callbacks{
+            [this](const std::string& command) { _insertCommandInConsole(command); },
+            [this](Model* model) { _initUiForNewModel(model); },
+            [this]() { _actualizeActions(); },
+            [this]() { _actualizeTabPanes(); },
+            [this](bool hasChanged) { _actualizeModelTextHasChanged(hasChanged); },
+            [this]() { return _check(); },
+            [this]() { return _setSimulationModelBasedOnText(); },
+            [this]() { _clearModelEditors(); },
+            [this](QString filename) { return _saveGraphicalModel(filename); },
+            [this](QFile* file, QString data) { return _saveTextModel(file, data); },
+            [this](std::string filename) { return _loadGraphicalModel(filename); },
+            [this]() { _connectSceneSignals(); },
+            [this](const char* context) { _disconnectSceneSignals(context); }});
 
     // system preferences
     SystemPreferences::load();
@@ -206,6 +419,18 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     } else  if (SystemPreferences::modelAtStart() == 2) { // LOAD MODEL (should be enum
         this->_loadGraphicalModel(SystemPreferences::modelfilename());
     }
+
+    for (QAction* action : this->findChildren<QAction*>()) {
+        if (action == nullptr || !action->objectName().startsWith("action")) {
+            continue;
+        }
+        connect(action, &QAction::triggered, this, [action](bool checked) {
+            qInfo().noquote() << QString("GUI action triggered: %1 (%2) checked=%3")
+                                     .arg(action->objectName(), action->text())
+                                     .arg(checked);
+        });
+    }
+
     // finally
     _actualizeActions();
     //_actualizeTabPanes();
@@ -222,11 +447,83 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 }
 
 MainWindow::~MainWindow() {
+    // Proactively disable trace callbacks before QWidget and simulator teardown starts.
+    if (simulator != nullptr && simulator->getTraceManager() != nullptr) {
+        simulator->getTraceManager()->beginShutdown();
+    }
+    _shuttingDown = true;
+    _disconnectSceneSignals("~MainWindow");
+    disconnect();
+    if (ui != nullptr && ui->graphicsView != nullptr) {
+        ui->graphicsView->clearEventHandlers();
+    }
     delete ui;
+    delete simulator;
+    delete propertyGenesys;
+    delete propertyList;
+    delete propertyEditorUI;
+    delete propertyBox;
+    delete _pluginCategoryColor;
+    delete _gmc_copies;
+    delete _ports_copies;
+    delete _draw_copy;
+    delete _group_copy;
+    delete undoView;
+}
+
+void MainWindow::_disconnectSceneSignals(const char* context) {
+    if (_sceneChangedConnection) {
+        QObject::disconnect(_sceneChangedConnection);
+        _sceneChangedConnection = QMetaObject::Connection();
+    }
+    if (_sceneFocusItemChangedConnection) {
+        QObject::disconnect(_sceneFocusItemChangedConnection);
+        _sceneFocusItemChangedConnection = QMetaObject::Connection();
+    }
+    if (_sceneSelectionChangedConnection) {
+        QObject::disconnect(_sceneSelectionChangedConnection);
+        _sceneSelectionChangedConnection = QMetaObject::Connection();
+    }
+    QObject* sceneObject = (ui != nullptr && ui->graphicsView != nullptr) ? ui->graphicsView->scene() : nullptr;
+    qInfo() << "Scene/MainWindow signal connections disconnected. context=" << context
+            << " scene=" << sceneObject << " mainWindow=" << this;
+}
+
+void MainWindow::_connectSceneSignals() {
+    _disconnectSceneSignals("_connectSceneSignals");
+    if (ui == nullptr || ui->graphicsView == nullptr || ui->graphicsView->scene() == nullptr) {
+        qWarning() << "Skipping scene connection because ui/graphicsView/scene is null";
+        return;
+    }
+    _sceneChangedConnection = connect(ui->graphicsView->scene(), &QGraphicsScene::changed, this, &MainWindow::sceneChanged);
+    _sceneFocusItemChangedConnection = connect(ui->graphicsView->scene(), &QGraphicsScene::focusItemChanged, this, &MainWindow::sceneFocusItemChanged);
+    _sceneSelectionChangedConnection = connect(ui->graphicsView->scene(), &QGraphicsScene::selectionChanged, this, &MainWindow::sceneSelectionChanged);
+    qInfo() << "Scene/MainWindow signal connections attached. scene=" << ui->graphicsView->scene()
+            << " mainWindow=" << this;
 }
 
 ModelGraphicsScene* MainWindow::myScene() const {
     return ui->graphicsView->getScene();
+}
+
+void MainWindow::_onPropertyEditorModelChanged() {
+    qInfo() << "[MainWindow] _onPropertyEditorModelChanged enter";
+    // Keep this wrapper for compatibility during the incremental Phase 6 refactor.
+    if (_propertyEditorController != nullptr && !_isDeferredPropertyEditorModelChangedScheduled) {
+        _isDeferredPropertyEditorModelChangedScheduled = true;
+        qInfo() << "[MainWindow] scheduling deferred property-editor model-changed handling";
+        QMetaObject::invokeMethod(this, [this]() {
+            _isDeferredPropertyEditorModelChangedScheduled = false;
+            if (_propertyEditorController == nullptr) {
+                return;
+            }
+            qInfo() << "[MainWindow] property-editor pipeline active before controller callback="
+                    << _propertyEditorController->isPostCommitPipelineActive();
+            qInfo() << "[MainWindow] executing deferred property-editor model-changed handling";
+            _propertyEditorController->onPropertyEditorModelChanged();
+        }, Qt::QueuedConnection);
+    }
+    qInfo() << "[MainWindow] _onPropertyEditorModelChanged exit";
 }
 
 
@@ -234,32 +531,9 @@ ModelGraphicsScene* MainWindow::myScene() const {
 
 
 void::MainWindow::saveItemForCopy(QList<GraphicalModelComponent*> * gmcList, QList<GraphicalConnection*> * connList) {
-    foreach (GraphicalConnection *conn, *connList) {
-        ModelComponent * source = conn->getSource()->component;
-        ModelComponent * dst = conn->getDestination()->component;
-
-        GraphicalModelComponent * sourceSelected = nullptr;
-        GraphicalModelComponent * dstSelected = nullptr;
-        foreach (GraphicalModelComponent * comp, *gmcList) {
-
-            if (source != nullptr) {
-
-                if (comp->getComponent()->getId() == source->getId()) {
-                    sourceSelected = comp;
-                }
-            }
-
-            if (dst != nullptr) {
-
-                if (comp->getComponent()->getId() == dst->getId()) {
-                    dstSelected = comp;
-                }
-            }
-        }
-
-        if (sourceSelected == nullptr || dstSelected == nullptr) {
-            connList->removeOne(conn);
-        }
+    // Keep this wrapper as part of the final compatibility façade from Phase 9 refactor.
+    if (_editCommandController != nullptr) {
+        _editCommandController->saveItemForCopy(gmcList, connList);
     }
 }
 
@@ -269,65 +543,107 @@ void MainWindow::_actualizeActions() {
     bool opened = simulator->getModelManager()->current() != nullptr;
     bool running = false;
     bool paused = false;
-    unsigned int numSelectedGraphicals = 0;
+    bool canCutCopyDelete = false;
+    bool canPaste = false;
+    bool canGroup = false;
+    bool canUngroup = false;
+    bool canConnect = false;
     unsigned int actualCommandundoRedo = 0; //@TODO
     unsigned int maxCommandundoRedo = 0; //@TODO
     if (opened) {
         running = simulator->getModelManager()->current()->getSimulation()->isRunning();
         paused = simulator->getModelManager()->current()->getSimulation()->isPaused();
-        numSelectedGraphicals = 0;//@TODO get total of selected graphical objects (this should br on another "actualize", I think
+
+        ModelGraphicsScene* scene = ui->graphicsView->getScene();
+        if (scene != nullptr) {
+            const QList<QGraphicsItem*> selectedItems = scene->selectedItems();
+            const QList<QGraphicsItem*> userOperableSelection = scene->userOperableItems(selectedItems);
+            canCutCopyDelete = !userOperableSelection.isEmpty();
+            canPaste = !_draw_copy->empty() || !_gmc_copies->empty() || !_group_copy->empty() || !_ports_copies->empty();
+
+            int selectedComponents = 0;
+            bool selectedGroup = false;
+            for (QGraphicsItem* item : selectedItems) {
+                if (dynamic_cast<GraphicalModelComponent*>(item) != nullptr) {
+                    selectedComponents++;
+                } else if (dynamic_cast<QGraphicsItemGroup*>(item) != nullptr) {
+                    selectedGroup = true;
+                }
+            }
+
+            canGroup = selectedComponents >= 2 && !selectedGroup;
+            canUngroup = selectedItems.size() == 1 && selectedGroup;
+            canConnect = scene->connectingStep() == 0;
+        }
     }
+    // Lock GUI interactions tied to model editing while simulation is running or paused.
+    const bool simulationInteractionLocked = opened && (running || paused);
 
     //
     ui->graphicsView->setEnabled(opened);
     ui->tabWidgetCentral->setEnabled(opened);
     // model
-    ui->menuModel->setEnabled(!running);
-    ui->actionModelNew->setEnabled(!running);
-    ui->actionModelSave->setEnabled(opened && !running);
-    ui->actionModelOpen->setEnabled(!running);
-    ui->actionModelClose->setEnabled(opened && !running);
+    // Keep model lifecycle actions locked while simulation remains active (running or paused).
+    ui->menuModel->setEnabled(!simulationInteractionLocked);
+    ui->actionModelNew->setEnabled(!simulationInteractionLocked);
+    ui->actionModelSave->setEnabled(opened && !simulationInteractionLocked);
+    ui->actionModelOpen->setEnabled(!simulationInteractionLocked);
+    ui->actionModelClose->setEnabled(opened && !simulationInteractionLocked);
     ui->actionModelInformation->setEnabled(opened);
-    ui->actionModelCheck->setEnabled(opened && !running);
+    ui->actionModelCheck->setEnabled(opened && !simulationInteractionLocked);
     //edit
-    ui->toolBarEdit->setEnabled(opened && !running);
-    ui->menuEdit->setEnabled(opened && !running);
+    // Keep structural editing tool surfaces locked while simulation remains active.
+    ui->toolBarEdit->setEnabled(opened && !simulationInteractionLocked);
+    ui->menuEdit->setEnabled(opened && !simulationInteractionLocked);
     // view
-    ui->menuView->setEnabled(opened && !running);
-    ui->toolBarView->setEnabled(opened && !running);
-    ui->toolBarAnimate->setEnabled(opened && !running);
-    ui->toolBarGraphicalModel->setEnabled(opened && !running);
-    ui->toolBarDraw->setEnabled(opened && !running);
+    // Keep scene manipulation and drawing surfaces locked while simulation remains active.
+    ui->menuView->setEnabled(opened && !simulationInteractionLocked);
+    ui->toolBarView->setEnabled(opened && !simulationInteractionLocked);
+    ui->toolBarAnimate->setEnabled(opened && !simulationInteractionLocked);
+    ui->toolBarGraphicalModel->setEnabled(opened && !simulationInteractionLocked);
+    ui->toolBarDraw->setEnabled(opened && !simulationInteractionLocked);
     // simulation
     ui->menuSimulation->setEnabled(opened);
-    ui->actionSimulationConfigure->setEnabled(opened && !running);
-    ui->actionSimulationStart->setEnabled(opened && !running);
-    ui->actionSimulationStep->setEnabled(opened && !running);
+    // Keep simulation structural controls locked while simulation remains active.
+    ui->actionSimulationConfigure->setEnabled(opened && !simulationInteractionLocked);
+    ui->actionSimulationStart->setEnabled(opened && !simulationInteractionLocked);
+    ui->actionSimulationStep->setEnabled(opened && !simulationInteractionLocked);
     ui->actionSimulationStop->setEnabled(opened && (running || paused));
     ui->actionSimulationPause->setEnabled(opened && running);
     ui->actionSimulationResume->setEnabled(opened && paused);
     ui->actionActivateGraphicalSimulation->setEnabled(opened);
-    ui->actionSimulatorsPluginManager->setEnabled(!running);
-    ui->actionSimulatorPreferences->setEnabled(!running);
+    ui->actionSimulatorsPluginManager->setEnabled(!simulationInteractionLocked);
+    ui->actionSimulatorPreferences->setEnabled(!simulationInteractionLocked);
+    // Keep plugins tree disabled while simulation interaction is locked.
+    ui->treeWidget_Plugins->setEnabled(opened && !simulationInteractionLocked);
 
     // debug
-    ui->tableWidget_Breakpoints->setEnabled(opened && !running);
+    // Keep mutable debug surface locked while simulation remains active.
+    ui->tableWidget_Breakpoints->setEnabled(opened && !simulationInteractionLocked);
     ui->tableWidget_Entities->setEnabled(opened && !running);
     ui->tableWidget_Variables->setEnabled(opened && !running);
 
     // Property Editor
-    ui->treeViewPropertyEditor->setEnabled(!running);
+    // Keep property editor disabled while simulation interaction is locked.
+    ui->treeViewPropertyEditor->setEnabled(opened && !simulationInteractionLocked);
 
     // based on SELECTED GRAPHICAL OBJECTS or on COMMANDS DONE (UNDO/REDO)
-    ui->toolBarArranje->setEnabled(opened && !running);
-    // TODO: MUDAR, ESTÁ HARDCODED, DEVERIA SER DISPONIBILIZADO COM UM COMPONENENTE FOSSE
-    // TODO: SELECIONADO
-    ui->actionEditCopy->setEnabled(0 && !running);
-    ui->actionEditCut->setEnabled(0 && !running);
-    ui->actionEditDelete->setEnabled((numSelectedGraphicals>0) && !running);
+    // Keep arrangement and structural mutation commands locked while simulation remains active.
+    ui->toolBarArranje->setEnabled(opened && !simulationInteractionLocked);
+    ui->actionEditCopy->setEnabled(canCutCopyDelete && !simulationInteractionLocked);
+    ui->actionEditCut->setEnabled(canCutCopyDelete && !simulationInteractionLocked);
+    ui->actionEditDelete->setEnabled(canCutCopyDelete && !simulationInteractionLocked);
+    ui->actionEditPaste->setEnabled(canPaste && !simulationInteractionLocked);
+    ui->actionGModelShowConnect->setEnabled(opened && canConnect && !simulationInteractionLocked);
+    ui->actionViewGroup->setEnabled(opened && canGroup && !simulationInteractionLocked);
+    ui->actionEditGroup->setEnabled(opened && canGroup && !simulationInteractionLocked);
+    ui->actionViewUngroup->setEnabled(opened && canUngroup && !simulationInteractionLocked);
+    ui->actionEditUngroup->setEnabled(opened && canUngroup && !simulationInteractionLocked);
+    ui->actionEditReplace->setEnabled(opened && !simulationInteractionLocked);
 
     // sliders
-    ui->horizontalSlider_ZoomGraphical->setEnabled(opened && !running);
+    // Keep zoom/edit navigation control locked while simulation remains active.
+    ui->horizontalSlider_ZoomGraphical->setEnabled(opened && !simulationInteractionLocked);
     if (_modelWasOpened && !opened) {
         _clearModelEditors();
     }
@@ -335,7 +651,7 @@ void MainWindow::_actualizeActions() {
     //slider animation speed
     ui->horizontalSliderAnimationSpeed->setEnabled(running && !paused);
 
-    ui->actionSelectAll->setEnabled(opened && !running);
+    ui->actionSelectAll->setEnabled(opened && !simulationInteractionLocked);
 
     _modelWasOpened = opened;
 }
@@ -357,7 +673,7 @@ void MainWindow::_actualizeTabPanes() {
             } else if (index == CONST.TabModelDataDefinitionsIndex) {
                 _actualizeModelDataDefinitions(true);
             }
-        } else if (index == CONST.TabCentralModelIndex) {
+        } else if (index == CONST.TabCentralSimulationIndex) {
             index = ui->tabWidgetSimulation->currentIndex();
             if (index == CONST.TabSimulationBreakpointsIndex) {
                 _actualizeDebugBreakpoints(true);
@@ -367,7 +683,10 @@ void MainWindow::_actualizeTabPanes() {
                 _actualizeDebugVariables(true);
             }
         } else if (index == CONST.TabCentralReportsIndex) {
-            index = ui->tabWidgetReports->currentIndex(); //@TODO: Add results
+            index = ui->tabWidgetReports->currentIndex();
+            if (index == CONST.TabReportResultIndex) {
+                _actualizeReportsResultsTable();
+            }
         }
     } else {
         ui->actionAnimateCounter->setChecked(false);
@@ -375,6 +694,91 @@ void MainWindow::_actualizeTabPanes() {
         ui->actionAnimateSimulatedTime->setChecked(false);
     }
 }
+
+void MainWindow::_prepareReportsResultsTable() {
+    QStringList headers;
+    headers << tr("Type")
+            << tr("ParentType")
+            << tr("ParentName")
+            << tr("Name")
+            << tr("NumElements")
+            << tr("Min")
+            << tr("Max")
+            << tr("Average")
+            << tr("Variance")
+            << tr("StdDev")
+            << tr("VarCoef")
+            << tr("HalfWidthCI")
+            << tr("ConfidenceLevel");
+    ui->tableWidget_ReportsResults->setHorizontalHeaderLabels(headers);
+    ui->tableWidget_ReportsResults->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    ui->tableWidget_ReportsResults->verticalHeader()->setVisible(false);
+    ui->tableWidget_ReportsResults->setSortingEnabled(false);
+    _clearReportsResultsTable();
+}
+
+void MainWindow::_clearReportsResultsTable() {
+    ui->tableWidget_ReportsResults->setRowCount(0);
+}
+
+void MainWindow::_actualizeReportsResultsTable() {
+    _clearReportsResultsTable();
+    if (simulator == nullptr || simulator->getModelManager() == nullptr || simulator->getModelManager()->current() == nullptr) {
+        return;
+    }
+    ModelSimulation* simulation = simulator->getModelManager()->current()->getSimulation();
+    if (simulation == nullptr) {
+        return;
+    }
+    const List<ModelDataDefinition*>* aggregates = simulation->getSimulationStatisticsAggregates();
+    if (aggregates == nullptr) {
+        return;
+    }
+
+    auto setCell = [this](int row, int col, const QString& value) {
+        ui->tableWidget_ReportsResults->setItem(row, col, new QTableWidgetItem(value));
+    };
+    auto numberToQString = [](double value) {
+        return QString::fromStdString(std::to_string(value));
+    };
+
+    int row = 0;
+    for (ModelDataDefinition* data : *aggregates->list()) {
+        if (data == nullptr) {
+            continue;
+        }
+        ui->tableWidget_ReportsResults->insertRow(row);
+        setCell(row, 0, QString::fromStdString(data->getClassname()));
+        setCell(row, 3, QString::fromStdString(data->getName()));
+
+        ModelDataDefinition* parent = nullptr;
+        if (StatisticsCollector* collector = dynamic_cast<StatisticsCollector*>(data)) {
+            parent = collector->getParent();
+            Statistics_if* stats = collector->getStatistics();
+            if (stats != nullptr) {
+                setCell(row, 4, QString::number(stats->numElements()));
+                setCell(row, 5, numberToQString(stats->min()));
+                setCell(row, 6, numberToQString(stats->max()));
+                setCell(row, 7, numberToQString(stats->average()));
+                setCell(row, 8, numberToQString(stats->variance()));
+                setCell(row, 9, numberToQString(stats->stddeviation()));
+                setCell(row, 10, numberToQString(stats->variationCoef()));
+                setCell(row, 11, numberToQString(stats->halfWidthConfidenceInterval()));
+                setCell(row, 12, numberToQString(stats->confidenceLevel()));
+            }
+        } else if (Counter* counter = dynamic_cast<Counter*>(data)) {
+            parent = counter->getParent();
+            setCell(row, 4, numberToQString(counter->getCountValue()));
+        }
+
+        if (parent != nullptr) {
+            setCell(row, 1, QString::fromStdString(parent->getClassname()));
+            setCell(row, 2, QString::fromStdString(parent->getName()));
+        }
+        row++;
+    }
+}
+
 
 void MainWindow::_actualizeSimulationEvents(SimulationEvent * re) {
     int row = ui->tableWidget_Simulation_Event->rowCount();
@@ -467,27 +871,33 @@ void MainWindow::_actualizeDebugBreakpoints(bool force) {
             row++;
         }
         for (Entity* entity : *sim->getBreakpointsOnEntity()->list()) {
-            ui->tableWidget_Breakpoints->setRowCount(++row);
+            ui->tableWidget_Breakpoints->setRowCount(row + 1);
             QTableWidgetItem* newItem;
+            newItem = new QTableWidgetItem("True");
+            ui->tableWidget_Breakpoints->setItem(row, 0, newItem);
             newItem = new QTableWidgetItem("Entity");
             ui->tableWidget_Breakpoints->setItem(row, 1, newItem);
             newItem = new QTableWidgetItem(QString::fromStdString(entity->getName()));
             ui->tableWidget_Breakpoints->setItem(row, 2, newItem);
+            row++;
         }
         for (double time : *sim->getBreakpointsOnTime()->list()) {
-            ui->tableWidget_Breakpoints->setRowCount(++row);
+            ui->tableWidget_Breakpoints->setRowCount(row + 1);
             QTableWidgetItem* newItem;
+            newItem = new QTableWidgetItem("True");
+            ui->tableWidget_Breakpoints->setItem(row, 0, newItem);
             newItem = new QTableWidgetItem("Time");
             ui->tableWidget_Breakpoints->setItem(row, 1, newItem);
             newItem = new QTableWidgetItem(QString::fromStdString(std::to_string(time)));
             ui->tableWidget_Breakpoints->setItem(row, 2, newItem);
+            row++;
         }
     }
 }
 
 
 void MainWindow::_insertCommandInConsole(std::string text) {
-    ui->textEdit_Console->setTextColor(myrgba(TraitsGUI<GMainWindow>::consoleTextColor));
+    ui->textEdit_Console->setTextColor(UtilGUI::rgbaFromPacked(TraitsGUI<GMainWindow>::consoleTextColor));
     QFont font(ui->textEdit_Console->font());
     font.setBold(true);
     ui->textEdit_Console->setFont(font);
@@ -496,17 +906,6 @@ void MainWindow::_insertCommandInConsole(std::string text) {
     font.setBold(false);
     ui->textEdit_Console->setFont(font);
 }
-
-
-QColor MainWindow::myrgba(uint64_t color) {
-    uint8_t r, g, b, a;
-    r = (color&0xFF000000)>>24;
-    g = (color&0x00FF0000)>>16;
-    b = (color&0x0000FF00)>>8;
-    a = (color&0x000000FF);
-    return QColor(r, g, b, a);
-}
-
 
 
 //-------------
@@ -531,269 +930,10 @@ void MainWindow::_showMessageNotImplemented(){
 
 
 void MainWindow::_helpCopy() {
-    // Pega a cena
-    ModelGraphicsScene *scene = (ModelGraphicsScene *)(ui->graphicsView->getScene());
-
-    QList<COPY*> * aux = new QList<COPY *>();
-    QList<GraphicalModelComponent *> *gmc_aux  = new QList<GraphicalModelComponent*>();
-    QList<GraphicalModelComponent *> *gmc_old_group_aux  = new QList<GraphicalModelComponent*>();
-    QList<GraphicalModelComponent *> *gmc_new_group_aux  = new QList<GraphicalModelComponent*>();
-    QList<GraphicalConnection *> *ports_aux = new QList<GraphicalConnection*>();
-    QList<QGraphicsItem *> *drawing_aux = new QList<QGraphicsItem*>();
-    QList<QGraphicsItemGroup *> *group_aux = new QList<QGraphicsItemGroup*>();
-
-    // Adicionando todos os componentes antes
-    foreach (GraphicalModelComponent * gmc , *_gmc_copies) {
-
-        if (gmc->group())
-            continue;
-
-        // Componente
-        ModelComponent * previousComponent = gmc->getComponent();
-
-        // Adiciona o componente no modelo
-        simulator->getModelManager()->current()->getComponentManager()->insert(previousComponent);
-
-        // Nome do plugin para a copia do componente
-        std::string pluginname = previousComponent->getClassname();
-
-        // Plugin para a copia do novo component
-        Plugin* plugin = simulator->getPluginManager()->find(pluginname);
-
-        // Ajustando a posicao da copia
-        //@TODO: Modificar para por onde o mouse clicou
-        QPointF position = gmc->pos();
-
-        // Copiando a cor
-        QColor color = gmc->getColor();
-
-        // Componente de Copia ou Recorte
-        ModelComponent * component  = (ModelComponent*) plugin->newInstance(simulator->getModelManager()->current());
-
-
-        GraphicalModelComponent* newgmc = new GraphicalModelComponent(plugin, component, position, color);
-        // Adiciona o componente graficamente
-        GraphicalModelComponent * oldgmc = scene->findGraphicalModelComponent(previousComponent->getId());
-
-        COPY * temp = new COPY();
-        temp->old = oldgmc;
-        temp->copy = newgmc;
-        aux->append(temp);
-        gmc_aux->append(newgmc);
+    // Keep this wrapper as part of the final compatibility façade from Phase 9 refactor.
+    if (_editCommandController != nullptr) {
+        _editCommandController->helpCopy();
     }
-
-    // Adicionando todos os componentes antes
-    foreach (QGraphicsItemGroup *group , *_group_copy) {
-        QList<GraphicalConnection*> * connGroup = new QList<GraphicalConnection*>();
-
-        unsigned int size = group->childItems().size();
-
-        for (unsigned int i = 0; i < (unsigned int) size; i++) {
-            GraphicalModelComponent *gmc = dynamic_cast<GraphicalModelComponent *>(group->childItems().at(0));
-
-            // remove do grupo para tratar o componente como um componente individual
-            group->removeFromGroup(gmc);
-
-            // Componente
-            ModelComponent * previousComponent = gmc->getComponent();
-
-            // Adiciona o componente no modelo
-            simulator->getModelManager()->current()->getComponentManager()->insert(previousComponent);
-
-            // Nome do plugin para a copia do componente
-            std::string pluginname = previousComponent->getClassname();
-
-            // Plugin para a copia do novo component
-            Plugin* plugin = simulator->getPluginManager()->find(pluginname);
-
-            // Ajustando a posicao da copia
-            //@TODO: Modificar para por onde o mouse clicou
-            QPointF position = gmc->pos();
-
-            // Copiando a cor
-            QColor color = gmc->getColor();
-
-            // Componente de Copia ou Recorte
-            ModelComponent * component  = (ModelComponent*) plugin->newInstance(simulator->getModelManager()->current());
-
-            GraphicalModelComponent* newgmc = new GraphicalModelComponent(plugin, component, position, color);
-            // Adiciona o componente graficamente
-            GraphicalModelComponent * oldgmc = scene->findGraphicalModelComponent(previousComponent->getId());
-
-            if (!oldgmc->getGraphicalInputPorts().empty() && !oldgmc->getGraphicalInputPorts().at(0)->getConnections()->empty()) {
-                connGroup->removeOne(oldgmc->getGraphicalInputPorts().at(0)->getConnections()->at(0));
-                connGroup->append(oldgmc->getGraphicalInputPorts().at(0)->getConnections()->at(0));
-            }
-
-            for (int j = 0; j < oldgmc->getGraphicalOutputPorts().size(); ++j) {
-                GraphicalComponentPort *port = oldgmc->getGraphicalOutputPorts().at(j);
-
-                if (!port->getConnections()->empty()) {
-                    connGroup->removeOne(port->getConnections()->at(0));
-                    connGroup->append(port->getConnections()->at(0));
-                }
-            }
-
-            gmc_old_group_aux->append(oldgmc);
-            gmc_new_group_aux->append(newgmc);
-            COPY * temp = new COPY();
-            temp->old = oldgmc;
-            temp->copy = newgmc;
-            aux->append(temp);
-            gmc_aux->append(newgmc);
-        }
-
-        saveItemForCopy(gmc_old_group_aux, connGroup);
-
-        // volta os itens no grupo
-        for (unsigned int k = 0; k < size; k++) {
-            group->addToGroup(gmc_old_group_aux->at(k));
-        }
-
-        for (unsigned int k = 0; k < (unsigned int) connGroup->size(); k++) {
-            _ports_copies->removeOne(connGroup->at(k));
-            _ports_copies->append(connGroup->at(k));
-        }
-
-        QGraphicsItemGroup *newGroup = new QGraphicsItemGroup();
-
-        ui->graphicsView->getScene()->insertComponentGroup(newGroup, *gmc_new_group_aux);
-
-        gmc_old_group_aux->clear();
-        gmc_new_group_aux->clear();
-        group_aux->append(newGroup);
-    }
-
-    // Adicionando as conexões (e seus respectivos componentes)
-    foreach (GraphicalConnection * conn, *_ports_copies) {
-
-        ModelComponent * source = conn->getSource()->component;
-        ModelComponent * dst = conn->getDestination()->component;
-
-        GraphicalComponentPort* sourcePort = nullptr;
-        GraphicalComponentPort* destinationPort = nullptr;
-
-        unsigned int portSourceConnection = 0;
-        unsigned int portDestinationConnection = 0;
-
-        // Ajustando a posicao da copia
-        //@TODO: Modificar para por onde o mouse clicou
-        GraphicalModelComponent * gmcSource = scene->findGraphicalModelComponent(source->getId());
-        GraphicalModelComponent * gmcDestination = scene->findGraphicalModelComponent(dst->getId());
-
-        foreach (GraphicalModelComponent * comp, *_gmc_copies) {
-
-            if (comp->getComponent()->getId() == source->getId()) {
-                sourcePort = conn->getSourceGraphicalPort();
-                portSourceConnection = conn->getPortSourceConnection();
-
-            }
-
-            if (comp->getComponent()->getId() == dst->getId()) {
-                destinationPort = conn->getDestinationGraphicalPort();
-                portDestinationConnection = conn->getPortDestinationConnection();
-            }
-        }
-
-        GraphicalModelComponent * gmcNewSource;
-        GraphicalModelComponent * gmcNewDestination;
-
-        foreach (COPY * c, *aux) {
-
-            if (c->old == gmcSource) gmcNewSource = c->copy;
-            if (c->old == gmcDestination) gmcNewDestination = c->copy;
-
-        }
-
-        // Cria GraphicalComponentPort para gmc source
-        sourcePort = gmcNewSource->getGraphicalOutputPorts().at(portSourceConnection);
-
-        // Cria GraphicalComponentPort para gmc destination
-        destinationPort = gmcNewDestination->getGraphicalInputPorts().at(portDestinationConnection);
-
-        // Conecta os componente graficamente e no modelo
-        GraphicalConnection * newConn = scene->addGraphicalConnection(sourcePort, destinationPort, portSourceConnection, portDestinationConnection);
-
-        ui->graphicsView->getScene()->clearPorts(newConn, gmcNewSource, gmcDestination);
-
-        ports_aux->append(newConn);
-    }
-
-    //Adicionando os desenhos
-    foreach(QGraphicsItem * draw, *_draw_copy) {
-        AnimationCounter *animationCounter = dynamic_cast<AnimationCounter*>(draw);
-        if (animationCounter) {
-            AnimationCounter *copiedItem;
-            copiedItem = new AnimationCounter();
-            copiedItem->setRect(0, 0, animationCounter->boundingRect().width(), animationCounter->boundingRect().height());
-            copiedItem->setPos(animationCounter->pos());
-            copiedItem->setCounter(animationCounter->getCounter());
-            copiedItem->setValue(animationCounter->getValue());
-            drawing_aux->append(copiedItem);
-            continue;
-        }
-
-        AnimationVariable *animationVariable = dynamic_cast<AnimationVariable*>(draw);
-        if (animationVariable) {
-            AnimationVariable *copiedItem;
-            copiedItem = new AnimationVariable();
-            copiedItem->setRect(0, 0, animationVariable->boundingRect().width(), animationVariable->boundingRect().height());
-            copiedItem->setPos(animationVariable->pos());
-            copiedItem->setVariable(animationVariable->getVariable());
-            copiedItem->setValue(animationVariable->getValue());
-            drawing_aux->append(copiedItem);
-            continue;
-        }
-
-        QGraphicsRectItem* rectItem = dynamic_cast<QGraphicsRectItem*>(draw);
-        if (rectItem) {
-            QGraphicsRectItem *copiedItem;
-            copiedItem = new QGraphicsRectItem(rectItem->rect());
-            copiedItem->setPos(rectItem->pos());
-            copiedItem->setFlag(QGraphicsItem::ItemIsSelectable, true);
-            copiedItem->setFlag(QGraphicsItem::ItemIsMovable, true);
-            drawing_aux->append(copiedItem);
-            continue;
-        }
-
-        QGraphicsEllipseItem* ellipseItem = dynamic_cast<QGraphicsEllipseItem*>(draw);
-        if (ellipseItem) {
-            QGraphicsEllipseItem *copiedItem;
-            copiedItem = new QGraphicsEllipseItem(ellipseItem->rect());
-            copiedItem->setPos(ellipseItem->pos());
-            copiedItem->setFlag(QGraphicsItem::ItemIsSelectable, true);
-            copiedItem->setFlag(QGraphicsItem::ItemIsMovable, true);
-            drawing_aux->append(copiedItem);
-            continue;
-        }
-
-        QGraphicsPolygonItem* polygonItem = dynamic_cast<QGraphicsPolygonItem*>(draw);
-        if (polygonItem) {
-            QGraphicsPolygonItem *copiedItem;
-            copiedItem = new QGraphicsPolygonItem(polygonItem->polygon());
-            copiedItem->setPos(polygonItem->pos());
-            copiedItem->setFlag(QGraphicsItem::ItemIsSelectable, true);
-            copiedItem->setFlag(QGraphicsItem::ItemIsMovable, true);
-            drawing_aux->append(copiedItem);
-            continue;
-        }
-
-        QGraphicsLineItem *lineItem = dynamic_cast<QGraphicsLineItem*>(draw);
-        if (lineItem) {
-            QGraphicsLineItem *copiedItem;
-            copiedItem = new QGraphicsLineItem(lineItem->line());
-            copiedItem->setPos(lineItem->pos());
-            copiedItem->setFlag(QGraphicsItem::ItemIsSelectable, true);
-            copiedItem->setFlag(QGraphicsItem::ItemIsMovable, true);
-            drawing_aux->append(copiedItem);
-            continue;
-        }
-    }
-
-    _gmc_copies = gmc_aux;
-    _ports_copies = ports_aux;
-    _draw_copy = drawing_aux;
-    _group_copy = group_aux;
 }
 
 
@@ -825,14 +965,12 @@ bool MainWindow::_check(bool success)
 
     if (res) {
         ModelGraphicsScene* scene = (ModelGraphicsScene*) (ui->graphicsView->scene());
+        // Schedule data-definition synchronization outside this check stack to avoid scene teardown reentrancy.
+        if (scene != nullptr) {
+            scene->requestGraphicalDataDefinitionsSync();
+        }
         // Mensagem de sucesso
         if (success) {
-            if (!scene->existDiagram()){
-                scene->createDiagrams();
-            } else {
-                scene->destroyDiagram();
-                scene->createDiagrams();
-            }
             QMessageBox::information(this, "Model Check", "Model successfully checked.");
         }
         // Salva os data definitions dos componentes atuais
@@ -902,10 +1040,14 @@ void MainWindow::unselectDrawIcons() {
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
-    // limpando referencia do ultimo elemento selecionado em property editor
-    ui->treeViewPropertyEditor->clearCurrentlyConnectedObject();
-
-    QMainWindow::closeEvent(event);
+    if (_closingApproved || _confirmApplicationExit()) {
+        _closingApproved = true;
+        // limpando referencia do ultimo elemento selecionado em property editor
+        ui->treeViewPropertyEditor->clearCurrentlyConnectedObject();
+        event->accept();
+        return;
+    }
+    event->ignore();
 }
 
 void MainWindow::_initUiForNewModel(Model* m) {
@@ -954,6 +1096,3 @@ void MainWindow::_actualizeUndo() {
     undoView->setVisible(false);
     undoView->setAttribute(Qt::WA_QuitOnClose, false);
 }
-
-
-

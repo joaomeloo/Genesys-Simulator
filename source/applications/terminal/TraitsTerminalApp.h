@@ -14,6 +14,7 @@
 #pragma once
 
 #include "GenesysShell/GenesysShell.h"
+#include "examples/smarts/Smart_ModalModelFSM.h"
 #include "examples/smarts/Smart_ExtendedFSM.h"
 #include "examples/smarts/Smart_CppForG.h"
 #include "examples/smarts/Smart_AssignWriteSeizes.h"
@@ -22,6 +23,7 @@
 #include "examples/arenaSmarts/Smart_AssignExample.h"
 #include "examples/smarts/Smart_SeizeDelayRelease.h"
 #include "examples/smarts/Smart_SeizeDelayReleaseMany.h"
+#include "examples/teaching/AnElectronicAssemblyAndTestSystem.h"
 
 template <typename T>
 struct TraitsTerminalApp {
@@ -95,6 +97,7 @@ template <> struct TraitsTerminalApp<GenesysApplication_if> {
 	//typedef Smart_Expression Application;
 	//typedef Smart_InventoryAndHoldingCosts Application;
 	//typedef Smart_MaxArrivalsField Application;
+	//typedef Smart_ModalModelFSM Application;
 	//typedef Smart_ModelRunUntil1000Parts Application;
 	//typedef Smart_ModuleDisplayVariables Application;
 	//typedef Smart_OverlappingResources Application;
@@ -129,7 +132,7 @@ template <> struct TraitsTerminalApp<GenesysApplication_if> {
 	//typedef Half_Adder Application;
 
     // TEACHING
-    //typedef AnElectronicAssemblyAndTestSystem Application;
+    typedef AnElectronicAssemblyAndTestSystem Application;
     //typedef OperatingSystem01 Application;
     //typedef OperatingSystem02 Application;
     //typedef OperatingSystem03 Application;
@@ -145,4 +148,3 @@ template <> struct TraitsTerminalApp<GenesysApplication_if> {
     // UNDER DEVELOPMENT
 	//typedef TestingTerminalApp Application;
 };
-

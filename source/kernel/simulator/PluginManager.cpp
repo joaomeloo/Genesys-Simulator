@@ -29,9 +29,35 @@ PluginManager::PluginManager(Simulator* simulator) {
 	_insertDefaultKernelElements();
 }
 
-bool PluginManager::autoInsertPlugins(const std::string pluginsListFilename) {
-	if (pluginsListFilename.empty())
-		return false;
+// Release connector and plugin wrappers owned by the manager during simulator teardown.
+PluginManager::~PluginManager() {
+	for (Plugin* plugin : *_plugins->list()) {
+		delete plugin;
+	}
+	delete _plugins;
+	delete _pluginConnector;
+}
+
+List<Plugin*>* PluginManager::_autoFindPlugins() {
+	List<std::string>* filenames = _pluginConnector->find();
+	for (std::string filename: *filenames->list()) {
+		insert(filename);
+	}
+	return  completePluginsFieldsAndTemplates();
+}
+
+List<Plugin*>* PluginManager::autoInsertPlugins() {
+    return autoInsertPlugins("", true);
+}
+
+List<Plugin*>* PluginManager::autoInsertPlugins(const std::string pluginsListFilename, const bool lookForPluginsIfFilenameNotFound)
+{
+	List<Plugin*>* loadedPlugins = nullptr;
+	if (pluginsListFilename.empty()) {
+		 if (lookForPluginsIfFilenameNotFound)
+		 	loadedPlugins = _autoFindPlugins();
+		return loadedPlugins;
+	}
 	std::string line;
 	std::string fullFilename;
 	if (pluginsListFilename[0] == Util::DirSeparator()) // absolute path
@@ -40,6 +66,7 @@ bool PluginManager::autoInsertPlugins(const std::string pluginsListFilename) {
 		fullFilename = Util::RunningPath()+Util::DirSeparator()+pluginsListFilename;
 	std::ifstream file(fullFilename, std::ifstream::in);
 	if (file.is_open()) {
+		loadedPlugins = new List<Plugin*>();
 		while (std::getline(file, line)) {
 			if (line.length()>=1) {
                 // TODO 2500701 why [0-2] are special chars?
@@ -52,12 +79,15 @@ bool PluginManager::autoInsertPlugins(const std::string pluginsListFilename) {
 			}
 		}
 		file.close();
-		completePluginsFieldsAndTemplates();
-	} else {
+		loadedPlugins = completePluginsFieldsAndTemplates();
+	} else
+	{
 		_simulator->getTraceManager()->traceError("Could not open file \""+pluginsListFilename+"\" (\""+fullFilename+"\")");
-		return false;
+		if (lookForPluginsIfFilenameNotFound) {
+			loadedPlugins = _autoFindPlugins();
+		}
 	}
-	return true;
+	return loadedPlugins;
 }
 
 std::string PluginManager::show() {
@@ -71,18 +101,13 @@ std::string PluginManager::show() {
 }
 
 void PluginManager::_insertDefaultKernelElements() {
-	StaticGetPluginInformation GetInfo;
-	GetInfo = &EntityType::GetPluginInformation;
-	_plugins->insert(new Plugin(GetInfo));
-	GetInfo = &Attribute::GetPluginInformation;
-	_plugins->insert(new Plugin(GetInfo));
-	GetInfo = &Counter::GetPluginInformation;
-	_plugins->insert(new Plugin(GetInfo));
-	GetInfo = &StatisticsCollector::GetPluginInformation;
-	_plugins->insert(new Plugin(GetInfo));
+	_plugins->insert(new Plugin(&EntityType::GetPluginInformation));
+	_plugins->insert(new Plugin(&Attribute::GetPluginInformation));
+	_plugins->insert(new Plugin(&Counter::GetPluginInformation));
+	_plugins->insert(new Plugin(&StatisticsCollector::GetPluginInformation));
 }
 
-bool PluginManager::completePluginsFieldsAndTemplates() {
+List<Plugin*>* PluginManager::completePluginsFieldsAndTemplates() {
 	return _simulator->_completePluginsFieldsAndTemplate();
 }
 
@@ -124,7 +149,7 @@ bool PluginManager::_insert(Plugin * plugin) {
 			Util::IncIndent();
 			_simulator->getTraceManager()->trace("The plugin already exists and was not inserted again");
 			Util::DecIndent();
-			return false;
+			return true; // It already exists. It was NOT inserted again, BUT it has been inserted BEFORE, therefore returns TRUE
 		}
 		_plugins->insert(plugin);
 		Util::IncIndent();
@@ -151,19 +176,20 @@ bool PluginManager::check(std::string dynamicLibraryFilename) {
 }
 
 Plugin * PluginManager::insert(std::string dynamicLibraryFilename) {
-	Plugin* plugin;
+	Plugin* plugin = nullptr;
 	try {
 		plugin = _pluginConnector->connect(dynamicLibraryFilename);
-		if (plugin != nullptr)
-			_insert(plugin);
-		else {
+		if (plugin != nullptr) {
+			if (!_insert(plugin)) {
+				plugin = nullptr;
+			}
+		} else {
 			_simulator->getTraceManager()->traceError("Plugin from file \"" + dynamicLibraryFilename + "\" could not be loaded.", TraceManager::Level::L3_errorRecover);
 		}
 	} catch (...) {
-
 		return nullptr;
 	}
-	return plugin; //@TODO Use of memory after it is freed
+	return plugin;
 }
 
 bool PluginManager::insert(Plugin* plugin) {
@@ -192,10 +218,9 @@ bool PluginManager::remove(Plugin * plugin) {
 }
 
 Plugin * PluginManager::find(std::string pluginTypeName) {
-	for (std::list<Plugin*>::iterator it = this->_plugins->list()->begin(); it != _plugins->list()->end(); it++) {
-		if ((*it)->getPluginInfo()->getPluginTypename() == pluginTypeName) {
-
-			return (*it);
+	for (Plugin* plugin : *this->_plugins->list()) {
+		if (plugin->getPluginInfo()->getPluginTypename() == pluginTypeName) {
+			return plugin;
 		}
 	}
 	return nullptr;
@@ -228,4 +253,3 @@ ModelDataDefinition* PluginManager::newInstance(std::string pluginTypename, Mode
 	}
 	return nullptr;
 }
-

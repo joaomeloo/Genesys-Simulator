@@ -23,14 +23,16 @@
 class Model;
 
 /*!
- * The ModelDataManager is responsible for inserting and removing elements (ModelDataDefinition) used by components,
- * in a consistent way.
- * TO FIX: No direct access for insertion or deletion should be allow
+ * \brief Central registry for \c ModelDataDefinition instances owned by a model.
+ *
+ * This manager groups model data by typename, supports insertion/removal/lookup
+ * operations and offers consistency checks used by components and model validation.
  */
 class ModelDataManager {
 public:
+	/*! \brief Creates a data manager attached to \p model. */
 	ModelDataManager(Model* model);
-	virtual ~ModelDataManager() = default;
+	virtual ~ModelDataManager();
 public:
 	/*!
 	 * \brief insert
@@ -114,18 +116,22 @@ public:
 	int getRankOf(std::string datadefinitionTypename, std::string name); //!< returns the position (1st position=0) of the modeldatum if found, or negative value if not found
 	/*!
 	 * \brief getDataDefinitionClassnames
-	 * \return
+	 * \return Snapshot list of current data-definition class names returned by value.
 	 */
-	std::list<std::string>* getDataDefinitionClassnames() const;
+	std::list<std::string> getDataDefinitionClassnames() const;
 
 	//private:
 public:
 	// @TODO: Should be removed and replaced by GetElement(elementType, rank)
 	List<ModelDataDefinition*>* getDataDefinitionList(std::string datadefinitionTypename) const;
 public:
+	/*! \brief Prints a textual summary of registered model data definitions. */
 	void show();
+	/*! \brief Returns the model that owns this data manager. */
 	Model* getParentModel() const;
+	/*! \brief Indicates whether managed data collections were modified. */
 	bool hasChanged() const;
+	/*! \brief Updates the internal changed flag. */
 	void setHasChanged(bool _hasChanged);
 private:
 	std::map<std::string, List<ModelDataDefinition*>*>* _datadefinitions;
@@ -134,4 +140,3 @@ private:
 };
 //namespace\\}
 #endif /* ELEMENTMANAGER_H */
-

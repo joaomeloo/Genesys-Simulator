@@ -1,12 +1,12 @@
 #include "systempreferences.h"
 #include <QSettings>
 
-bool SystemPreferences::_startMaximized = false;
+bool SystemPreferences::_startMaximized = true;
 bool SystemPreferences::_autoLoadPlugins = true;
-unsigned short int SystemPreferences::_modelAtStart = 2;
-std::string SystemPreferences::_modelfilename = "../../../../../../../models/Smart_Delay.gen";  //"";
+bool SystemPreferences::_checkSystemPackagesAtStart = true;
+unsigned short int SystemPreferences::_openModelAtStart = 1;
+std::string SystemPreferences::_modelfilenameToOpen = "";
 bool SystemPreferences::_darkMode = false;
-// "../../../../../models/Smart_Delay.gen"
 
 bool SystemPreferences::load()
 {
@@ -53,23 +53,43 @@ void SystemPreferences::setAutoLoadPlugins(bool newAutoLoadPlugins)
 
 unsigned short SystemPreferences::modelAtStart()
 {
-    return _modelAtStart;
+    return _openModelAtStart;
 }
 
 void SystemPreferences::setModelAtStart(unsigned short newModelAtStart)
 {
     if (newModelAtStart>=0 && newModelAtStart<=2)
-        _modelAtStart = newModelAtStart;
+        _openModelAtStart = newModelAtStart;
 }
 
 std::string SystemPreferences::modelfilename()
 {
-    return _modelfilename;
+    return _modelfilenameToOpen;
 }
 
 void SystemPreferences::setModelfilename(const std::string &newModelfilename)
 {
-    _modelfilename = newModelfilename;
+    _modelfilenameToOpen = newModelfilename;
+}
+
+bool SystemPreferences::checkSystemPackagesAtStart()
+{
+    return _checkSystemPackagesAtStart;
+}
+
+void SystemPreferences::setCheckSystemPackagesAtStart(bool newCheckSystemPackagesAtStart)
+{
+    _checkSystemPackagesAtStart = newCheckSystemPackagesAtStart;
+}
+
+bool SystemPreferences::darkMode()
+{
+    return _darkMode;
+}
+
+void SystemPreferences::setDarkMode(bool newDarkMode)
+{
+    _darkMode = newDarkMode;
 }
 
 bool SystemPreferences::darkMode()

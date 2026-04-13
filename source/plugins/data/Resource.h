@@ -104,9 +104,9 @@ public:
 public:
 	//Resource(Model* model);
 	Resource(Model* model, std::string name = "");
-	virtual ~Resource() = default;
+	virtual ~Resource() override;
 public:
-	virtual std::string show();
+	virtual std::string show() override;
 public: // static
 	static PluginInformation* GetPluginInformation();
 	static ModelDataDefinition* LoadInstance(Model* model, PersistenceRecord *fields);
@@ -137,12 +137,12 @@ public: // g&s
 	unsigned int getNumberBusy() const;
 
 protected: // protected must override
-	virtual bool _loadInstance(PersistenceRecord *fields);
-	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues);
+	virtual bool _loadInstance(PersistenceRecord *fields) override;
+	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues) override;
 protected: // protected could override
-	virtual bool _check(std::string& errorMessage);
-	virtual void _createInternalAndAttachedData();
-	virtual void _initBetweenReplications();
+	virtual bool _check(std::string& errorMessage) override;
+	virtual void _createInternalAndAttachedData() override;
+	virtual void _initBetweenReplications() override;
 
 private: //methods
 	void _notifyReleaseEventHandlers(); //!< Notify observer classes that some of the resource capacity has been released. It is useful for allocation components (such as Seize) to know when an entity waiting into a queue can try to seize the resource again
@@ -151,6 +151,7 @@ private: //methods
 	void _active();
 	void _checkFailByCount();
 	friend class Failure;
+	friend class ResourceTestProbe;
 
 private:
 
@@ -188,14 +189,13 @@ private: // internal elements
 	StatisticsCollector* _cstatTimeFailed = nullptr;
 	StatisticsCollector* _cstatProportionSeized = nullptr;
 	StatisticsCollector* _cstatCapacityUtilization = nullptr;
-	Counter* _counterTotalTimeSeized;
-	Counter* _counterTotalTimeFailed;
-	Counter* _counterNumSeizes;
-	Counter* _counterNumReleases;
-	Counter* _counterTotalCostPerUse;
-	Counter* _counterTotalCostBusy;
-	Counter* _counterTotalCostIdle;
+	Counter* _counterTotalTimeSeized = nullptr;
+	Counter* _counterTotalTimeFailed = nullptr;
+	Counter* _counterNumSeizes = nullptr;
+	Counter* _counterNumReleases = nullptr;
+	Counter* _counterTotalCostPerUse = nullptr;
+	Counter* _counterTotalCostBusy = nullptr;
+	Counter* _counterTotalCostIdle = nullptr;
 };
 
 #endif /* RESOURCE_H */
-

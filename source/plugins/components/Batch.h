@@ -72,7 +72,7 @@ public: // constructors
 	Batch(Model* model, std::string name = "");
 	virtual ~Batch() = default;
 public: // virtual
-	virtual std::string show();
+	virtual std::string show() override;
 public: // static
 	static PluginInformation* GetPluginInformation();
 	static ModelComponent* LoadInstance(Model* model, PersistenceRecord *fields);
@@ -81,6 +81,8 @@ public:
 	void setGroupedEntityType(EntityType* groupedEntityType);
 	void setGroupedEntityTypeName(std::string groupedEntityTypeName);
 	EntityType* getGroupedEntityType() const;
+	void setBatchType(Batch::BatchType batchType);
+	Batch::BatchType getBatchType() const;
 	void setAttributeName(std::string attributeName);
 	std::string getAttributeName() const;
 	void setBatchSize(std::string batchSize);
@@ -91,12 +93,12 @@ public:
 	Batch::GroupedAttribs getGroupedAttributes() const;
 protected: // virtual should
 	//virtual void _initBetweenReplications();
-	virtual void _createInternalAndAttachedData();
-	virtual bool _check(std::string& errorMessage);
+	virtual void _createInternalAndAttachedData() override;
+	virtual bool _check(std::string& errorMessage) override;
 protected: // virtual must
-	virtual void _onDispatchEvent(Entity* entity, unsigned int inputPortNumber);
-	virtual bool _loadInstance(PersistenceRecord *fields);
-	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues);
+	virtual void _onDispatchEvent(Entity* entity, unsigned int inputPortNumber) override;
+	virtual bool _loadInstance(PersistenceRecord *fields) override;
+	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues) override;
 private: // methods
 private: // attributes 1:1
 
@@ -122,4 +124,3 @@ private: // attributes 1:n
 
 
 #endif /* BATCH_H */
-

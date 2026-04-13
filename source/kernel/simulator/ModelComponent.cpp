@@ -26,7 +26,11 @@ ModelComponent::ModelComponent(Model* model, std::string componentTypename, std:
 }
 
 ModelComponent::~ModelComponent() {
+	// Keep manager bookkeeping consistent before releasing owned connection resources.
     _parentModel->getComponentManager()->remove(this);
+	// Release the connection manager owned by this component instance.
+	delete _connections;
+	_connections = nullptr;
 }
 
 
@@ -36,6 +40,10 @@ ModelComponent::~ModelComponent() {
 
 ConnectionManager* ModelComponent::getConnectionManager() const {
 	return _connections; // @TODO How to know if it changes?
+}
+
+void ModelComponent::connectTo(ModelComponent* component, unsigned int inputPortNumber) {
+    _connections->insert(component, inputPortNumber);
 }
 
 bool ModelComponent::hasBreakpointAt() {

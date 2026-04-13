@@ -15,6 +15,7 @@
 #define TRACEMANAGER_H
 
 #include "../util/List.h"
+#include "../util/Util.h"
 #include <functional>
 //namespace GenesysKernel {
 class Model;
@@ -62,7 +63,7 @@ public:
 	};
 public:
 	TraceManager(Simulator* simulator); //(Model* model);
-	virtual ~TraceManager() = default;
+	virtual ~TraceManager();
 public: // add trace handlers
 	// for handlers that are simple functions
 	/*!
@@ -114,12 +115,14 @@ public: // traces (invoke trace handlers)
 	void traceSimulation(void* thisobject, TraceManager::Level level, double time, Entity* entity, ModelComponent* component, std::string text); //<! Deprected
 	void traceSimulation(void* thisobject, TraceManager::Level level, std::string text); //<! Deprected
 public: // traces
+	// Disable callbacks and clear handler lists before simulator teardown destroys GUI objects.
+	void beginShutdown();
 	void trace(std::string text, TraceManager::Level level = TraceManager::Level::L8_detailed); //!< Trace to a general output, used when not simulating (eg: adding plugins, checking the model, etc
 	void traceError(std::string text, std::exception e); //!< Trace to the error output, used in every situation an error happens (simulating, report, general)
 	void traceError(std::string text, TraceManager::Level level = TraceManager::Level::L1_errorFatal); //!< Trace to the error output, used in every situation an error happens (simulating, report, general)
 	void traceReport(std::string text, TraceManager::Level level = TraceManager::Level::L2_results); //!< Trace to the report output, used only when generating the simulation report
-	void traceSimulation(void* thisobject, double time, Entity* entity, ModelComponent* component, std::string text, TraceManager::Level level = TraceManager::Level::L8_detailed); //!< Trace to the simulation output, used only when simulation is running (eg: compponents or dataElements inform something)
-	void traceSimulation(void* thisobject, std::string text, TraceManager::Level level = TraceManager::Level::L8_detailed); //!< Trace to the simulation output, used only when simulation is running (eg: compponents or dataElements inform something)
+    void traceSimulation(void* thisobject, double time, Entity* entity, ModelComponent* component, std::string text, TraceManager::Level level = TraceManager::Level::L8_detailed,bool showAnyway = false); //!< Trace to the simulation output, used only when simulation is running (eg: compponents or dataElements inform something)
+    void traceSimulation(void* thisobject, std::string text, TraceManager::Level level = TraceManager::Level::L8_detailed, bool showAnyway = false); //!< Trace to the simulation output, used only when simulation is running (eg: compponents or dataElements inform something)
 
 public:
 	/*!
@@ -156,7 +159,7 @@ public:
 private:
 	//void _addHandler(List<traceListener>* list, )
 	bool _traceConditionPassed(TraceManager::Level level);
-	bool _traceSimulationConditionPassed(TraceManager::Level level, void* thisobject);
+    bool _traceSimulationConditionPassed(TraceManager::Level level, void* thisobject, bool showAnyway = false);
 private: // trace listener
 	// for handlers that are simple functions
 	List<traceListener>* _traceHandlers = new List<traceListener>();
@@ -184,11 +187,12 @@ private:
 	Simulator* _simulator;
 private:
 	TraceManager::Level _traceLevel; // = TraceManager::Level::L9_mostDetailed;
-	double _lastTimeTraceSimulation = -1.0;
+	bool _shuttingDown = false;
+    double _lastTimeTraceSimulation = -1.0; // an invalid time
 	Util::identification _lastEntityTraceSimulation = 0;
 	Util::identification _lastModuleTraceSimulation = 0;
 	bool _traceSimulationRuleAllAllowed = true;
-	List<std::string>* _errorMessages; /* @TODO: 18/08/24 this is a new one. several methods should use it */
+    List<std::string>* _errorMessages = new List<std::string>(); /* @TODO: 18/08/24 this is a new one. several methods should use it */
 
 };
 
@@ -247,6 +251,9 @@ public:
 		_e = e;
 	}
 
+	TraceErrorEvent(std::string text, TraceManager::Level level) : TraceEvent(text, level) {
+	}
+
 	std::exception getException() const {
 		return _e;
 	}
@@ -295,4 +302,3 @@ public:
 
 //namespace\\}
 #endif /* TRACEMANAGER_H */
-

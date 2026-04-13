@@ -46,11 +46,15 @@ Seize::Seize(Model* model, std::string name) : ModelComponent(model, Util::TypeO
     SimulationControlGenericClassNotDC<QueueableItem*, Model*, QueueableItem>* propQueueableItem = new SimulationControlGenericClassNotDC<QueueableItem*, Model*, QueueableItem>(
                                     _parentModel,
                                     std::bind(&Seize::getQueueableItem, this), std::bind(&Seize::setQueueableItem, this, std::placeholders::_1),
-                                    Util::TypeOf<Seize>(), getName(), "QueueableItem", "");
+                                    Util::TypeOf<Seize>(), getName(), "QueueableItem", "", false, true, false,
+                                    [](Model* model) { return new QueueableItem(model, ""); });
+    // This block enables explicit typed creation for request list elements while preserving existing list semantics.
     SimulationControlGenericListPointer<SeizableItem*, Model*, SeizableItem>* propRequests = new SimulationControlGenericListPointer<SeizableItem*, Model*, SeizableItem> (
 									_parentModel,
 									std::bind(&Seize::getSeizeRequests, this), std::bind(&Seize::addRequest, this, std::placeholders::_1), std::bind(&Seize::removeRequest, this, std::placeholders::_1),
-									Util::TypeOf<Seize>(), getName(), "Requests", "");
+									Util::TypeOf<Seize>(), getName(), "Requests", "", true, true, false,
+                                    [](Model* model, const std::string& name) { return new SeizableItem(model, name, "1", SeizableItem::SelectionRule::LARGESTREMAININGCAPACITY); },
+                                    [](Model* model) { return new SeizableItem(model, "", "1", SeizableItem::SelectionRule::LARGESTREMAININGCAPACITY); });
 
     _parentModel->getControls()->insert(propAlloc);
 	_parentModel->getControls()->insert(propPriority);
@@ -179,7 +183,7 @@ void Seize::_onDispatchEvent(Entity* entity, unsigned int inputPortNumber) {
 				queue = static_cast<Queue*> (set->getElementSet()->getAtRank(index));
 			}
 			queue->insertElement(waitingRec); // ->list()->insert(waitingRec);
-			_parentModel->getTracer()->traceSimulation(this, _parentModel->getSimulation()->getSimulatedTime(), entity, this, "Entity starts to wait for resource in queue \"" + queue->getName() + "\" with " + std::to_string(queue->size()) + " elements");
+			traceSimulation(this, _parentModel->getSimulation()->getSimulatedTime(), entity, this, "Entity starts to wait for resource in queue \"" + queue->getName() + "\" with " + std::to_string(queue->size()) + " elements");
 			return;
 		} else { // alocate the resource
 			std::string attribIndex="";
@@ -187,7 +191,7 @@ void Seize::_onDispatchEvent(Entity* entity, unsigned int inputPortNumber) {
 			if (seizable->getSaveAttribute() != "") {
 				entity->setAttributeValue(seizable->getSaveAttribute(), *index, attribIndex);
 			}
-			_parentModel->getTracer()->traceSimulation(this, _parentModel->getSimulation()->getSimulatedTime(), entity, this, entity->getName() + " seizes " + std::to_string(quantity) + " elements of resource \"" + resource->getName() + "\" (capacity:" + std::to_string(resource->getCapacity()) + ", numberbusy:" + std::to_string(resource->getNumberBusy()) + ")");
+			traceSimulation(this, _parentModel->getSimulation()->getSimulatedTime(), entity, this, entity->getName() + " seizes " + std::to_string(quantity) + " elements of resource \"" + resource->getName() + "\" (capacity:" + std::to_string(resource->getCapacity()) + ", numberbusy:" + std::to_string(resource->getNumberBusy()) + ")");
 		}
 	}
 	_parentModel->sendEntityToComponent(entity, this->getConnectionManager()->getFrontConnection());
@@ -216,8 +220,8 @@ bool Seize::_loadInstance(PersistenceRecord *fields) {
 void Seize::_saveInstance(PersistenceRecord *fields, bool saveDefaultValues) {
 	ModelComponent::_saveInstance(fields, saveDefaultValues);
 	fields->saveField("allocationType", static_cast<int> (_allocationType), static_cast<int> (DEFAULT.allocationType), saveDefaultValues);
-	fields->saveField("priority=", _priority, DEFAULT.priority, saveDefaultValues);
-	fields->saveField("priorityExpression=", _priorityExpression, DEFAULT.priorityExpression, saveDefaultValues);
+	fields->saveField("priority", _priority, DEFAULT.priority, saveDefaultValues);
+	fields->saveField("priorityExpression", _priorityExpression, DEFAULT.priorityExpression, saveDefaultValues);
 	if (_queueableItem != nullptr) {
 		_queueableItem->saveInstance(fields, saveDefaultValues);
 	}
@@ -357,10 +361,12 @@ void Seize::_handlerForResourceEvent(Resource* resource) { //@TODO Resource is u
 			}
 		}
 		if (canSeizeAll) {
+			Entity* waitingEntity = first->getEntity();
+			std::string waitingEntityName = waitingEntity->getName();
 			queue->removeElement(first);
-			//traceSimulation(this, tnow, first->getEntity(), this, "Waiting entity " + first->getEntity()->getName() + " removed from queue and will try to seize the resources");// now seizes " + std::to_string(quantity) + " elements of resource \"" + resource->getName() + "\"");
-			trace("Waiting entity " + first->getEntity()->getName() + " removed from queue and will try to seize the resources"); // now seizes " + std::to_string(quantity) + " elements of resource \"" + resource->getName() + "\"");
-			_parentModel->sendEntityToComponent(first->getEntity(), this); // move waiting entity from queue to this component
+			//traceSimulation(this, tnow, waitingEntity, this, "Waiting entity " + waitingEntityName + " removed from queue and will try to seize the resources");// now seizes " + std::to_string(quantity) + " elements of resource \"" + resource->getName() + "\"");
+			trace("Waiting entity " + waitingEntityName + " removed from queue and will try to seize the resources"); // now seizes " + std::to_string(quantity) + " elements of resource \"" + resource->getName() + "\"");
+			_parentModel->sendEntityToComponent(waitingEntity, this); // move waiting entity from queue to this component
 		}
 		/*
 		if (request->getResource() == resource) {
@@ -433,6 +439,7 @@ Resource* Seize::_getResourceFromSeizableItem(SeizableItem* seizable, Entity* en
 				trace("Member index " + std::to_string(index) + " was specifically choosen", TraceManager::Level::L9_mostDetailed);
 				break;
 			case SeizableItem::SelectionRule::PREFEREDORDER:
+			{
 				bestValue = 0;
 				index = 0;
 				unsigned int quantity = _parentModel->parseExpression(seizable->getQuantityExpression());
@@ -475,6 +482,10 @@ Resource* Seize::_getResourceFromSeizableItem(SeizableItem* seizable, Entity* en
 					}
 					index = bestIndex;
 				}
+				break;
+			}
+			case SeizableItem::SelectionRule::num_elements:
+				traceError("Invalid SelectionRule enum value: num_elements");
 				break;
 		}
 		trace("Member of set " + set->getName() + " chosen index " + std::to_string(index), TraceManager::Level::L8_detailed);

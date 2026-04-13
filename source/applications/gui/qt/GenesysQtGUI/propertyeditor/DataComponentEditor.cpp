@@ -1,133 +1,226 @@
 #include "DataComponentEditor.h"
 
-DataComponentEditor::DataComponentEditor(PropertyEditorGenesys* editor, SimulationControl* property) {
+#include <utility>
+
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QHeaderView>
+#include <QDebug>
+#include <QMetaObject>
+#include <Qt>
+
+#include "DataComponentProperty.h"
+#include "ComboBoxEnum.h"
+
+DataComponentEditor::DataComponentEditor(
+    PropertyEditorGenesys* editor,
+    SimulationControl* property,
+    AfterChange afterChange
+    ) : _editor(editor), _afterChange(std::move(afterChange)) {
+
     _window = new QWidget;
+    _window->setWindowTitle("List Item Editor");
+    auto* rootLayout = new QVBoxLayout(_window);
+
     _view = new QTreeWidget(_window);
     _edit = new QPushButton("Edit", _window);
     _newValue = new QInputDialog(_window);
 
     _view->setColumnCount(2);
-    _view->setHeaderLabels({"Property","Value"});
-    _edit->move(270,15);
+    _view->setHeaderLabels({"Property", "Value"});
+    _view->header()->setStretchLastSection(true);
 
-    _window->setFixedSize(360,200);
+    auto* lineLayout = new QHBoxLayout();
+    lineLayout->addWidget(_view, 1);
 
-    QObject::connect(_edit, &QPushButton::clicked, this, [this, editor, property]{editProperty(editor, property);});
-};
+    auto* buttons = new QVBoxLayout();
+    buttons->addWidget(_edit);
+    buttons->addStretch(1);
+    lineLayout->addLayout(buttons);
 
-DataComponentEditor::DataComponentEditor(PropertyEditorGenesys* editor, List<SimulationControl*>* properties) {
+    rootLayout->addLayout(lineLayout);
+    _window->setMinimumSize(520, 300);
+
+    QObject::connect(_edit, &QPushButton::clicked, this, [this, property]() {
+        editProperty(property);
+    });
+}
+
+DataComponentEditor::DataComponentEditor(
+    PropertyEditorGenesys* editor,
+    List<SimulationControl*>* properties,
+    AfterChange afterChange
+    ) : _editor(editor), _afterChange(std::move(afterChange)) {
+
     _window = new QWidget;
+    _window->setWindowTitle("List Item Editor");
+    auto* rootLayout = new QVBoxLayout(_window);
+
     _view = new QTreeWidget(_window);
     _edit = new QPushButton("Edit", _window);
     _newValue = new QInputDialog(_window);
 
     _view->setColumnCount(2);
-    _edit->move(270,15);
+    _view->setHeaderLabels({"Property", "Value"});
+    _view->header()->setStretchLastSection(true);
 
-    _window->setFixedSize(400,200);
+    auto* lineLayout = new QHBoxLayout();
+    lineLayout->addWidget(_view, 1);
 
-    QObject::connect(_edit, &QPushButton::clicked, this, [this, editor, properties]{editProperty(editor, properties);});
-};
+    auto* buttons = new QVBoxLayout();
+    buttons->addWidget(_edit);
+    buttons->addStretch(1);
+    lineLayout->addLayout(buttons);
 
-DataComponentEditor::~DataComponentEditor() {
-    delete _window;
-    delete _view;
-    delete _newValue;
-};
+    rootLayout->addLayout(lineLayout);
+    _window->setMinimumSize(520, 300);
+
+    QObject::connect(_edit, &QPushButton::clicked, this, [this, properties]() {
+        editProperty(properties);
+    });
+}
+
+void DataComponentEditor::_notifyChanged() {
+    if (_afterChange) {
+        qInfo() << "[DataComponentEditor] scheduling deferred afterChange callback";
+        QMetaObject::invokeMethod(_window, [callback = _afterChange]() {
+            callback();
+        }, Qt::QueuedConnection);
+    }
+}
 
 void DataComponentEditor::open_window(SimulationControl* property) {
     _view->clear();
     configure_properties(property);
-
     _window->show();
-};
+    _window->raise();
+    _window->activateWindow();
+}
 
 void DataComponentEditor::open_window(List<SimulationControl*>* properties) {
     _view->clear();
     configure_properties(properties);
-
     _window->show();
-};
+    _window->raise();
+    _window->activateWindow();
+}
 
 void DataComponentEditor::configure_properties(SimulationControl* property) {
-    if (property->getProperties()) {
-        for (auto prop : *property->getProperties()->list()) {
-            QTreeWidgetItem* newItem = new QTreeWidgetItem(_view);
-            _view->addTopLevelItem(newItem);
+    if (property == nullptr) {
+        return;
+    }
 
-            QString newValue = QString::fromStdString(prop->getName());
-            QString itemValue = QString::fromStdString(prop->getValue());
-            newItem->setText(0,newValue);
-            newItem->setText(1,itemValue);
-        }
+    List<SimulationControl*>* nestedProperties = property->getEditableProperties();
+    if (nestedProperties == nullptr) {
+        return;
+    }
+
+    for (auto prop : *nestedProperties->list()) {
+        auto* item = new QTreeWidgetItem(_view);
+        item->setText(0, QString::fromStdString(prop->getName()));
+        item->setText(1, QString::fromStdString(prop->getValue()));
+        _view->addTopLevelItem(item);
     }
 }
 
 void DataComponentEditor::configure_properties(List<SimulationControl*>* properties) {
-    for (auto prop : *properties->list()) {
-        QTreeWidgetItem* newItem = new QTreeWidgetItem(_view);
-        _view->addTopLevelItem(newItem);
+    if (properties == nullptr) {
+        return;
+    }
 
-        QString newValue = QString::fromStdString(prop->getName());
-        QString itemValue = QString::fromStdString(prop->getValue());
-        newItem->setText(0,newValue);
-        newItem->setText(1,itemValue);
+    for (auto prop : *properties->list()) {
+        auto* item = new QTreeWidgetItem(_view);
+        item->setText(0, QString::fromStdString(prop->getName()));
+        item->setText(1, QString::fromStdString(prop->getValue()));
+        _view->addTopLevelItem(item);
     }
 }
 
-void DataComponentEditor::editProperty(PropertyEditorGenesys* editor, SimulationControl* property) {
-    // current element
-    QTreeWidgetItem* currentItem = _view->currentItem();
-
-    // change property
-    int index = 0;
-    for (auto prop : *property->getProperties()->list()) {
-        if (index == _view->currentIndex().row()) {
-            if (prop->getIsList()) {
-                DataComponentProperty* newList = new DataComponentProperty(editor, prop, true);
-                newList->open_window();
-            } else if (prop->getIsEnum()) {
-                    ComboBoxEnum* box = new ComboBoxEnum(editor, prop);
-                    box->open_box();
-                } else if (prop->getIsClass()) {
-                        DataComponentEditor* newClass = new DataComponentEditor(editor, prop);
-                        newClass->open_window(prop);
-                    } else {
-                        QString valueToChange = _newValue->getText(_newValue, "Item", "Enter the value:");
-                        currentItem->setText(1,valueToChange);
-
-                        editor->changeProperty(prop, valueToChange.toStdString());
-                        }
-        }
-        index++;
+void DataComponentEditor::editProperty(SimulationControl* property) {
+    qInfo() << "[DataComponentEditor] editProperty(SimulationControl*) enter";
+    if (property == nullptr) {
+        return;
     }
-}
 
-void DataComponentEditor::editProperty(PropertyEditorGenesys* editor, List<SimulationControl*>* properties) {
-    // current element
-    QTreeWidgetItem* currentItem = _view->currentItem();
+    List<SimulationControl*>* nestedProperties = property->getEditableProperties();
+    if (nestedProperties == nullptr) {
+        return;
+    }
 
-    // change property
+    const int selectedRow = _view->currentIndex().row();
+    if (selectedRow < 0) {
+        return;
+    }
+
     int index = 0;
-    for (auto prop : *properties->list()) {
-        if (index == _view->currentIndex().row()) {
+    for (auto prop : *nestedProperties->list()) {
+        if (index == selectedRow) {
             if (prop->getIsList()) {
-                DataComponentProperty* newList = new DataComponentProperty(editor, prop, true);
-
+                auto* newList = new DataComponentProperty(_editor, prop, true, _afterChange);
                 newList->open_window();
             } else if (prop->getIsEnum()) {
-                    ComboBoxEnum* box = new ComboBoxEnum(editor, prop);
-                    box->open_box();
+                auto* box = new ComboBoxEnum(_editor, prop, _afterChange);
+                box->open_box();
             } else if (prop->getIsClass()) {
-                    DataComponentEditor* newClass = new DataComponentEditor(editor, prop);
-                    newClass->open_window(prop);
-                } else {
-                    QString valueToChange = _newValue->getText(_newValue, "Item", "Enter the value:");
-                    currentItem->setText(1,valueToChange);
-
-                    editor->changeProperty(prop, valueToChange.toStdString());
+                auto* newClass = new DataComponentEditor(_editor, prop, _afterChange);
+                newClass->open_window(prop);
+            } else {
+                const QString valueToChange = _newValue->getText(_newValue, "Item", "Enter the value:");
+                if (!valueToChange.isNull()) {
+                    const std::string oldValue = prop->getValue();
+                    _editor->changeProperty(prop, valueToChange.toStdString());
+                    _view->clear();
+                    configure_properties(property);
+                    if (prop->getValue() != oldValue) {
+                        _notifyChanged();
                     }
+                }
+            }
+            return;
         }
-        index++;
+        ++index;
     }
+    qInfo() << "[DataComponentEditor] editProperty(SimulationControl*) exit";
+}
+
+void DataComponentEditor::editProperty(List<SimulationControl*>* properties) {
+    qInfo() << "[DataComponentEditor] editProperty(List*) enter";
+    if (properties == nullptr) {
+        return;
+    }
+
+    const int selectedRow = _view->currentIndex().row();
+    if (selectedRow < 0) {
+        return;
+    }
+
+    int index = 0;
+    for (auto prop : *properties->list()) {
+        if (index == selectedRow) {
+            if (prop->getIsList()) {
+                auto* newList = new DataComponentProperty(_editor, prop, true, _afterChange);
+                newList->open_window();
+            } else if (prop->getIsEnum()) {
+                auto* box = new ComboBoxEnum(_editor, prop, _afterChange);
+                box->open_box();
+            } else if (prop->getIsClass()) {
+                auto* newClass = new DataComponentEditor(_editor, prop, _afterChange);
+                newClass->open_window(prop);
+            } else {
+                const QString valueToChange = _newValue->getText(_newValue, "Item", "Enter the value:");
+                if (!valueToChange.isNull()) {
+                    const std::string oldValue = prop->getValue();
+                    _editor->changeProperty(prop, valueToChange.toStdString());
+                    _view->clear();
+                    configure_properties(properties);
+                    if (prop->getValue() != oldValue) {
+                        _notifyChanged();
+                    }
+                }
+            }
+            return;
+        }
+        ++index;
+    }
+    qInfo() << "[DataComponentEditor] editProperty(List*) exit";
 }

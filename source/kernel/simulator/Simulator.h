@@ -28,6 +28,8 @@
 
 //namespace GenesysKernel {
 
+class PluginManager;
+
 /* https://www.doxygen.nl/manual/commands.html
  * Bried description \class \implements
  *
@@ -43,7 +45,7 @@ class Simulator {
 	typedef void (*eventHandler)();
 public:
 	Simulator();
-	virtual ~Simulator() = default;
+	virtual ~Simulator();
 public: // only get
 	/*!
 	 * \brief getVersion
@@ -92,7 +94,7 @@ public: // only get
     ExperimentManager* getExperimentManager() const;
 
 private:
-	bool _completePluginsFieldsAndTemplate();
+	List<Plugin*>* _completePluginsFieldsAndTemplate();
 	friend class PluginManager; //@TODO: should be only member function PluginManager::completePluginsFieldsAndTemplate()
 
 private: // attributes 1:1 objects
@@ -105,12 +107,11 @@ private: // attributes 1:1 objects
 
 private: // attributes 1:1 native
 	const std::string _name = "GenESyS - GENeric and Expansible SYstem Simulator";
-    const std::string _versionName = "turingpoint";
-    const unsigned int _versionNumber = 250823;
+    const std::string _versionName = "thecodexbebout";
+    const unsigned int _versionNumber = 260330;
 };
 //namespace\\}
 
 // passing a "C" class factory function which instantiates the class. 
 typedef /*GenesysKernel::*/Simulator* GenesysSimulator;
 #endif /* GENESYS_H */
-

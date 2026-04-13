@@ -21,6 +21,9 @@ public:
     static std::string modelfilename();
     static void setModelfilename(const std::string &newModelfilename);
 
+    static bool checkSystemPackagesAtStart();
+    static void setCheckSystemPackagesAtStart(bool newCheckSystemPackagesAtStart);
+
     static bool darkMode();
     static void setDarkMode(bool newDarkMode);
 
@@ -29,8 +32,9 @@ private:
 private:
     static bool _startMaximized;
     static bool _autoLoadPlugins;
-    static unsigned short int _modelAtStart;
-    static std::string _modelfilename;
+    static bool _checkSystemPackagesAtStart;
+    static unsigned short int _openModelAtStart;
+    static std::string _modelfilenameToOpen;
 	static bool _darkMode;
 };
 

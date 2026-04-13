@@ -31,7 +31,7 @@ Decide::Decide(Model* model, std::string name) : ModelComponent(model, Util::Typ
 									_parentModel,
                                     std::bind(&Decide::getConditions, this), std::bind(&Decide::addConditions, this, std::placeholders::_1), std::bind(&Decide::removeConditions, this, std::placeholders::_1),
 									Util::TypeOf<Decide>(), getName(), "Conditions", "");
-	
+
 	_parentModel->getControls()->insert(propConditions);
 
 	_addProperty(propConditions);
@@ -58,7 +58,7 @@ void Decide::_onDispatchEvent(Entity* entity, unsigned int inputPortNumber) {
 	unsigned short i = 0;
 	for (std::list<std::string>::iterator it = _conditions->list()->begin(); it != _conditions->list()->end(); it++) {
 		value = _parentModel->parseExpression((*it));
-		_parentModel->getTracer()->traceSimulation(this, _parentModel->getSimulation()->getSimulatedTime(), entity, this, std::to_string(i + 1) + "th condition evaluated to " + Util::StrTruncIfInt(std::to_string(value)) + "  // " + (*it));
+        traceSimulation(this, _parentModel->getSimulation()->getSimulatedTime(), entity, this, std::to_string(i + 1) + "th condition evaluated to " + Util::StrTruncIfInt(std::to_string(value)) + "  // " + (*it));
 		if (value) {
 			if (_reportStatistics) {
 				_numberOuts->getAtRank(i)->incCountValue();
@@ -68,7 +68,7 @@ void Decide::_onDispatchEvent(Entity* entity, unsigned int inputPortNumber) {
 		}
 		i++;
 	}
-	_parentModel->getTracer()->traceSimulation(this, _parentModel->getSimulation()->getSimulatedTime(), entity, this, "No condition has been evaluated true");
+    traceSimulation(this, _parentModel->getSimulation()->getSimulatedTime(), entity, this, "No condition has been evaluated true");
 	if (_reportStatistics) {
 		_numberOuts->getAtRank(i)->incCountValue();
 	}

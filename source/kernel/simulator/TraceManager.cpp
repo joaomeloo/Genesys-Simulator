@@ -18,8 +18,35 @@
 
 TraceManager::TraceManager(Simulator* simulator) {//(Model* model) {
 	_simulator = simulator;
-	_traceLevel = TraitsKernel<Simulator>::traceLevel;
-	//@TODO: Tracelevels should be based on the tracelevel of each "class" 
+    _traceLevel = TraitsKernel<Simulator>::traceLevel; // inherits the kernel trace leval
+}
+
+TraceManager::~TraceManager() {
+	// Reuse shutdown path so callback vectors are neutralized before storage is released.
+	beginShutdown();
+	delete _traceHandlers;
+	delete _traceErrorHandlers;
+	delete _traceReportHandlers;
+	delete _traceSimulationHandlers;
+	delete _traceHandlersMethod;
+	delete _traceErrorHandlersMethod;
+	delete _traceReportHandlersMethod;
+	delete _traceSimulationHandlersMethod;
+	delete _traceSimulationExceptionRule;
+	delete _errorMessages;
+}
+
+void TraceManager::beginShutdown() {
+	// Mark tracer as shutting down and clear all callback targets to block late GUI invocations.
+	_shuttingDown = true;
+	_traceHandlers->clear();
+	_traceErrorHandlers->clear();
+	_traceReportHandlers->clear();
+	_traceSimulationHandlers->clear();
+	_traceHandlersMethod->clear();
+	_traceErrorHandlersMethod->clear();
+	_traceReportHandlersMethod->clear();
+	_traceSimulationHandlersMethod->clear();
 }
 
 void TraceManager::setTraceLevel(TraceManager::Level _traceLevel) {
@@ -74,16 +101,20 @@ void TraceManager::trace(TraceManager::Level level, std::string text) {
 }
 
 void TraceManager::trace(std::string text, TraceManager::Level level) {
+	// Ignore traces during teardown to prevent late callbacks on already-destroyed objects.
+	if (_shuttingDown) {
+		return;
+	}
 	if (_traceConditionPassed(level)) {
 		text = Util::Indent() + text;
 		//text = "L" + std::to_string(static_cast<int> (level)) + "    " + Util::Indent() + text;
 		TraceEvent e = TraceEvent(text, level);
 		/*  @TODO:--: somewhere in future it should be interesting to use "auto" and c++17 at least */
-		for (std::list<traceListener>::iterator it = this->_traceHandlers->list()->begin(); it != _traceHandlers->list()->end(); it++) {
-			(*it)(e);
+		for (auto handler : *this->_traceHandlers->list()) {
+			handler(e);
 		}
-		for (std::list<traceListenerMethod>::iterator it = this->_traceHandlersMethod->list()->begin(); it != _traceHandlersMethod->list()->end(); it++) {
-			(*it)(e);
+		for (auto& handlerMethod : *this->_traceHandlersMethod->list()) {
+			handlerMethod(e);
 		}
 	}
 }
@@ -97,19 +128,35 @@ void TraceManager::trace(std::string text, TraceManager::Level level) {
 //}
 
 void TraceManager::traceError(std::string text, TraceManager::Level level) {
-	std::exception e;
-	traceError(text, e);
+	// Ignore traces during teardown to prevent late callbacks on already-destroyed objects.
+	if (_shuttingDown) {
+		return;
+	}
+	text = Util::Indent() + text;
+	_errorMessages->insert(text);
+	TraceErrorEvent exceptEvent = TraceErrorEvent(text, level);
+	for (auto handler : *this->_traceErrorHandlers->list()) {
+		handler(exceptEvent);
+	}
+	for (auto& handlerMethod : *this->_traceErrorHandlersMethod->list()) {
+		handlerMethod(exceptEvent);
+	}
 }
 
 void TraceManager::traceError(std::string text, std::exception e) {
+	// Ignore traces during teardown to prevent late callbacks on already-destroyed objects.
+	if (_shuttingDown) {
+		return;
+	}
 	text = Util::Indent() + text;
+	_errorMessages->insert(text);
 	TraceErrorEvent exceptEvent = TraceErrorEvent(text, e);
 	/*  @TODO:--: somewhere in future it should be interesting to use "auto" and c++17 at least */
-	for (std::list<traceErrorListener>::iterator it = this->_traceErrorHandlers->list()->begin(); it != _traceErrorHandlers->list()->end(); it++) {
-		(*it)(exceptEvent);
+	for (auto handler : *this->_traceErrorHandlers->list()) {
+		handler(exceptEvent);
 	}
-	for (std::list<traceErrorListenerMethod>::iterator it = this->_traceErrorHandlersMethod->list()->begin(); it != _traceErrorHandlersMethod->list()->end(); it++) {
-		(*it)(exceptEvent);
+	for (auto& handlerMethod : *this->_traceErrorHandlersMethod->list()) {
+		handlerMethod(exceptEvent);
 	}
 }
 
@@ -117,17 +164,21 @@ void TraceManager::traceSimulation(void* thisobject, TraceManager::Level level, 
 	traceSimulation(thisobject, text, level);
 }
 
-void TraceManager::traceSimulation(void* thisobject, std::string text, TraceManager::Level level) {
-	if (_traceSimulationConditionPassed(level, thisobject)) {
+void TraceManager::traceSimulation(void* thisobject, std::string text, TraceManager::Level level, bool showAnyway) {
+	// Ignore traces during teardown to prevent late callbacks on already-destroyed objects.
+	if (_shuttingDown) {
+		return;
+	}
+    if (_traceSimulationConditionPassed(level, thisobject,showAnyway)) {
 		text = Util::Indent() + text;
 		//text = "L" + std::to_string(static_cast<int> (level)) + "    " + Util::Indent() + text;
 		TraceSimulationEvent e = TraceSimulationEvent(level, 0.0, nullptr, nullptr, text);
 		/*  @TODO:--: somewhere in future it should be interesting to use "auto" and c++17 at least */
-		for (std::list<traceSimulationListener>::iterator it = this->_traceSimulationHandlers->list()->begin(); it != _traceSimulationHandlers->list()->end(); it++) {
-			(*it)(e);
+		for (auto handler : *this->_traceSimulationHandlers->list()) {
+			handler(e);
 		}
-		for (std::list<traceSimulationListenerMethod>::iterator it = this->_traceSimulationHandlersMethod->list()->begin(); it != _traceSimulationHandlersMethod->list()->end(); it++) {
-			(*it)(e);
+		for (auto& handlerMethod : *this->_traceSimulationHandlersMethod->list()) {
+			handlerMethod(e);
 		}
 	}
 }
@@ -136,15 +187,19 @@ void TraceManager::traceSimulation(void* thisobject, TraceManager::Level level, 
 	traceSimulation(thisobject, time, entity, component, text, level);
 }
 
-void TraceManager::traceSimulation(void* thisobject, double time, Entity* entity, ModelComponent* component, std::string text, TraceManager::Level level) {
-	if (_traceSimulationConditionPassed(level, thisobject)) {
+void TraceManager::traceSimulation(void* thisobject, double time, Entity* entity, ModelComponent* component, std::string text, TraceManager::Level level, bool showAnyway) {
+	// Ignore traces during teardown to prevent late callbacks on already-destroyed objects.
+	if (_shuttingDown) {
+		return;
+	}
+    if (_traceSimulationConditionPassed(level, thisobject, showAnyway)) {
 		text = Util::Indent() + text;
 		TraceSimulationEvent e = TraceSimulationEvent(level, time, entity, component, text);
-		for (std::list<traceSimulationListener>::iterator it = this->_traceSimulationHandlers->list()->begin(); it != _traceSimulationHandlers->list()->end(); it++) {
-			(*it)(e);
+		for (auto handler : *this->_traceSimulationHandlers->list()) {
+			handler(e);
 		}
-		for (std::list<traceSimulationListenerMethod>::iterator it = this->_traceSimulationHandlersMethod->list()->begin(); it != _traceSimulationHandlersMethod->list()->end(); it++) {
-			(*it)(e);
+		for (auto& handlerMethod : *this->_traceSimulationHandlersMethod->list()) {
+			handlerMethod(e);
 		}
 	}
 }
@@ -154,6 +209,10 @@ void TraceManager::traceSimulation(void* thisobject, double time, Entity* entity
 //}
 
 void TraceManager::traceReport(std::string text, TraceManager::Level level) {
+	// Ignore traces during teardown to prevent late callbacks on already-destroyed objects.
+	if (_shuttingDown) {
+		return;
+	}
 	if (_traceConditionPassed(level)) {
 		text = Util::Indent() + text;
 		TraceEvent e = TraceEvent(text, level);// Envia para os handlers de resultados se for L2_resultsHtml e não vazio
@@ -165,11 +224,11 @@ void TraceManager::traceReport(std::string text, TraceManager::Level level) {
 				(*it)(e);
 			}
 		} else if (level == TraceManager::Level::L2_results && !text.empty()) {
-			for (std::list<traceListener>::iterator it = this->_traceReportHandlers->list()->begin(); it != _traceReportHandlers->list()->end(); it++) {
-				(*it)(e);
+			for (auto handler : *this->_traceReportHandlers->list()) {
+				handler(e);
 			}
-			for (std::list<traceListenerMethod>::iterator it = this->_traceReportHandlersMethod->list()->begin(); it != _traceReportHandlersMethod->list()->end(); it++) {
-				(*it)(e);
+			for (auto& handlerMethod : *this->_traceReportHandlersMethod->list()) {
+				handlerMethod(e);
 			}
 		}
 	}
@@ -183,12 +242,14 @@ bool TraceManager::_traceConditionPassed(TraceManager::Level level) {
 	return /*this->_debugged &&*/ static_cast<int> (this->_traceLevel) >= static_cast<int> (level);
 }
 
-bool TraceManager::_traceSimulationConditionPassed(TraceManager::Level level, void* thisobject) {
-	bool result = _traceConditionPassed(level);
-	bool isException = false;
-	if (result) {
-		isException = (_traceSimulationExceptionRule->find(thisobject) != _traceSimulationExceptionRule->list()->end());
-	}
-	result &= (_traceSimulationRuleAllAllowed && !isException) || (!_traceSimulationRuleAllAllowed && isException); // xor
+bool TraceManager::_traceSimulationConditionPassed(TraceManager::Level level, void* thisobject, bool showAnyway) {
+    if (showAnyway)
+        return true;
+    bool result = _traceConditionPassed(level);
+    if (result) {
+        bool isException = false;
+        isException = (_traceSimulationExceptionRule->find(thisobject) != _traceSimulationExceptionRule->list()->end());
+        result &= (_traceSimulationRuleAllAllowed && !isException) || (!_traceSimulationRuleAllAllowed && isException); // xor
+    }
 	return result;
 }

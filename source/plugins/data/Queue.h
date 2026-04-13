@@ -53,11 +53,18 @@ public:
 	unsigned int geComponentOutputPort() const {
 		return _thisComponentOutputPort;
 	}
+	unsigned long long getArrivalOrder() const {
+		return _arrivalOrder;
+	}
+	void setArrivalOrder(unsigned long long arrivalOrder) {
+		_arrivalOrder = arrivalOrder;
+	}
 private:
 	Entity* _entity;
 	ModelComponent* _thisComponent;
 	double _timeStartedWaiting;
 	unsigned int _thisComponentOutputPort;
+	unsigned long long _arrivalOrder = 0;
 };
 
 /*!
@@ -101,7 +108,7 @@ public:
 	Queue(Model* model, std::string name = "");
 	virtual ~Queue();
 public:
-	virtual std::string show();
+	virtual std::string show() override;
 public: // static
 	static PluginInformation* GetPluginInformation();
 	static ModelDataDefinition* LoadInstance(Model* model, PersistenceRecord *fields);
@@ -124,19 +131,21 @@ public: // to implement SIMAN functions
 	//public:
 	//	void initBetweenReplications();
 protected: // must be overriden
-	virtual bool _loadInstance(PersistenceRecord *fields);
-	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues);
+	virtual bool _loadInstance(PersistenceRecord *fields) override;
+	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues) override;
 protected: // could be overriden
-	virtual bool _check(std::string& errorMessage);
-	virtual void _initBetweenReplications();
-	virtual void _createInternalAndAttachedData();
-	virtual ParserChangesInformation* _getParserChangesInformation();
+	virtual bool _check(std::string& errorMessage) override;
+	virtual void _initBetweenReplications() override;
+	virtual void _createInternalAndAttachedData() override;
+	virtual ParserChangesInformation* _getParserChangesInformation() override;
 
 private:
 	void _initCStats();
+	void _configureListComparator();
 private:
 	List<Waiting*>* _list = new List<Waiting*>();
 	double _lastTimeNumberInQueueChanged;
+	unsigned long long _nextArrivalOrder = 0;
 private: //1::1
 
 	const struct DEFAULT_VALUES {
@@ -151,4 +160,3 @@ private: // inner internal elements
 };
 
 #endif /* QUEUE_H */
-

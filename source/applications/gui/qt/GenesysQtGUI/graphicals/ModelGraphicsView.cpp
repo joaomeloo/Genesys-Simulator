@@ -32,12 +32,14 @@
 #include "graphicals/ModelGraphicsView.h"
 #include "graphicals/ModelGraphicsScene.h"
 #include "graphicals/GraphicalModelComponent.h"
+#include "UtilGUI.h"
 #include "TraitsGUI.h"
 #include <Qt>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <fstream>
 #include <streambuf>
+#include <cmath>
 
 ModelGraphicsView::ModelGraphicsView(QWidget *parent) : QGraphicsView(parent) {
 	setInteractive(true);
@@ -117,15 +119,6 @@ void ModelGraphicsView::setComboBox(std::map<SimulationControl*, ComboBoxEnum*>*
     ((ModelGraphicsScene*) scene())->setComboBox(propBox);
 }
 
-QColor ModelGraphicsView::myrgba(uint64_t color) {
-	uint8_t r, g, b, a;
-	r = (color&0xFF000000)>>24;
-	g = (color&0x00FF0000)>>16;
-	b = (color&0x0000FF00)>>8;
-	a = (color&0x000000FF);
-	return QColor(r, g, b, a);
-}
-
 void ModelGraphicsView::setEnabled(bool enabled) {
 	QGraphicsView::setEnabled(enabled);
 	QBrush background;
@@ -133,11 +126,11 @@ void ModelGraphicsView::setEnabled(bool enabled) {
 		// background
 		//unsigned int colorVal1 = 255 * 13.0 / 16.0;
 		//unsigned int colorVal2 = 255 * 15.0 / 16.0;
-		background = QColor(myrgba(TraitsGUI<GView>::backgroundEnabledColor));//255, 255, 128, 64);
+		background = QColor(UtilGUI::rgbaFromPacked(TraitsGUI<GView>::backgroundEnabledColor));//255, 255, 128, 64);
 		//getScene()->showGrid();
 	} else {
 		// background
-		background = myrgba(TraitsGUI<GView>::backgroundDisabledColor);//Qt::lightGray;
+		background = UtilGUI::rgbaFromPacked(TraitsGUI<GView>::backgroundDisabledColor);//Qt::lightGray;
 	}
 	background.setStyle(Qt::SolidPattern);
 	setBackgroundBrush(background);
@@ -146,25 +139,45 @@ void ModelGraphicsView::setEnabled(bool enabled) {
 //---------------------------------------------------------
 
 void ModelGraphicsView::notifySceneMouseEventHandler(QGraphicsSceneMouseEvent* mouseEvent) {
-	this->_sceneMouseEventHandler(mouseEvent);
+	if (this->_sceneMouseEventHandler) {
+		this->_sceneMouseEventHandler(mouseEvent);
+	}
 }
 
 void ModelGraphicsView::notifySceneWheelInEventHandler() {
-    this->_sceneWheelInEventHandler();
+    if (this->_sceneWheelInEventHandler) {
+        this->_sceneWheelInEventHandler();
+    }
 }
 
 void ModelGraphicsView::notifySceneWheelOutEventHandler() {
-    this->_sceneWheelOutEventHandler();
+    if (this->_sceneWheelOutEventHandler) {
+        this->_sceneWheelOutEventHandler();
+    }
 }
 
-void ModelGraphicsView::notifySceneGraphicalModelEventHandler(GraphicalModelEvent* modelGraphicsEvent) {
-	if (_notifyGraphicalModelEventHandlers)
+/**
+ * @brief Dispatches graphical model change event to registered callback.
+ * @param modelGraphicsEvent Event payload from scene.
+ *
+ * @todo Replace callback with signal/slot to improve composability.
+ */
+void ModelGraphicsView::notifySceneGraphicalModelEventHandler(const GraphicalModelEvent& modelGraphicsEvent) {
+	if (_notifyGraphicalModelEventHandlers && this->_sceneGraphicalModelEventHandler) {
         this->_sceneGraphicalModelEventHandler(modelGraphicsEvent);
+    }
     /// @todo actualize property editor?
 }
 
 void ModelGraphicsView::setCanNotifyGraphicalModelEventHandlers(bool can) {
 	_notifyGraphicalModelEventHandlers = can;
+}
+
+void ModelGraphicsView::clearEventHandlers() {
+    _sceneMouseEventHandler = nullptr;
+    _sceneWheelInEventHandler = nullptr;
+    _sceneWheelOutEventHandler = nullptr;
+    _sceneGraphicalModelEventHandler = nullptr;
 }
 
 //---------------------------------------------------------
@@ -217,6 +230,28 @@ void ModelGraphicsView::setParentWidget(QWidget *parentWidget) {
 	((ModelGraphicsScene*) scene())->setParentWidget(parentWidget);
 }
 
+// Stores ruler visibility and refreshes the viewport overlays.
+void ModelGraphicsView::setRuleVisible(bool visible) {
+    _ruleVisible = visible;
+    viewport()->update();
+}
+
+// Returns current ruler visibility used by the view menu state.
+bool ModelGraphicsView::isRuleVisible() const {
+    return _ruleVisible;
+}
+
+// Stores guide visibility and refreshes the viewport overlays.
+void ModelGraphicsView::setGuidesVisible(bool visible) {
+    _guidesVisible = visible;
+    viewport()->update();
+}
+
+// Returns current guide visibility used by the view menu state.
+bool ModelGraphicsView::isGuidesVisible() const {
+    return _guidesVisible;
+}
+
 //------------------------------------------------------
 
 void ModelGraphicsView::changed(const QList<QRectF> &region) {
@@ -237,7 +272,48 @@ void ModelGraphicsView::selectionChanged() {
 
 //------------------------------------------------------
 
+// Draws lightweight rulers and center guides on top of scene content when enabled.
+void ModelGraphicsView::drawForeground(QPainter *painter, const QRectF &rect) {
+    QGraphicsView::drawForeground(painter, rect);
+    const QRectF visibleRect = mapToScene(viewport()->rect()).boundingRect();
+    if (!visibleRect.isValid()) {
+        return;
+    }
+
+    if (_ruleVisible) {
+        painter->save();
+        QPen rulerPen(QColor(90, 90, 90, 180));
+        painter->setPen(rulerPen);
+        const qreal tickStep = 100.0;
+        const qreal majorTick = 12.0;
+        const qreal minorTick = 6.0;
+        painter->drawLine(QPointF(visibleRect.left(), visibleRect.top()), QPointF(visibleRect.right(), visibleRect.top()));
+        painter->drawLine(QPointF(visibleRect.left(), visibleRect.top()), QPointF(visibleRect.left(), visibleRect.bottom()));
+        for (qreal x = std::floor(visibleRect.left() / tickStep) * tickStep; x <= visibleRect.right(); x += tickStep) {
+            painter->drawLine(QPointF(x, visibleRect.top()), QPointF(x, visibleRect.top() + majorTick));
+            painter->drawText(QPointF(x + 2.0, visibleRect.top() + 24.0), QString::number(static_cast<int>(x)));
+        }
+        for (qreal y = std::floor(visibleRect.top() / tickStep) * tickStep; y <= visibleRect.bottom(); y += tickStep) {
+            painter->drawLine(QPointF(visibleRect.left(), y), QPointF(visibleRect.left() + minorTick, y));
+            painter->drawText(QPointF(visibleRect.left() + 8.0, y - 2.0), QString::number(static_cast<int>(y)));
+        }
+        painter->restore();
+    }
+
+    if (_guidesVisible) {
+        painter->save();
+        QPen guidesPen(QColor(0, 120, 215, 150));
+        guidesPen.setStyle(Qt::DashLine);
+        painter->setPen(guidesPen);
+        const QPointF center = visibleRect.center();
+        painter->drawLine(QPointF(visibleRect.left(), center.y()), QPointF(visibleRect.right(), center.y()));
+        painter->drawLine(QPointF(center.x(), visibleRect.top()), QPointF(center.x(), visibleRect.bottom()));
+        painter->restore();
+    }
+}
+
+//------------------------------------------------------
+
 QList<QGraphicsItem *> ModelGraphicsView::selectedItems() {
 	return ((ModelGraphicsScene*) scene())->selectedItems();
 }
-

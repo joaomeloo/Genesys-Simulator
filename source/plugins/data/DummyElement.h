@@ -5,7 +5,7 @@
 
 /*
  * File:   DummyElement.h
- * Author: rlcancian
+ * Author: Prof. Rafael Luiz Cancian, Dr. Eng.
  *
  * Created on 11 de janeiro de 2022, 22:26
  */
@@ -25,7 +25,7 @@ public: /// new public user methods for this component
 	// ...
 
 public: /// virtual public methods
-	virtual std::string show();
+	virtual std::string show() override;
 
 public: /// static public methods that must have implementations (Load and New just the same. GetInformation must provide specific infos for the new component
 	static PluginInformation* GetPluginInformation();
@@ -33,8 +33,8 @@ public: /// static public methods that must have implementations (Load and New j
 	static ModelDataDefinition* NewInstance(Model* model, std::string name = "");
 
 protected: /// virtual protected method that must be overriden
-	virtual bool _loadInstance(PersistenceRecord *fields);
-	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues);
+	virtual bool _loadInstance(PersistenceRecord *fields) override;
+	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues) override;
 
 protected: /// virtual protected methods that could be overriden by derived classes, if needed
 	/*! This method is called by ModelChecker during model check. The component should check itself to verify if user parameters are ok (ex: correct syntax for the parser) and everithing in its parameters allow the model too run without errors in this component */
@@ -46,7 +46,7 @@ protected: /// virtual protected methods that could be overriden by derived clas
 	/*! This method is called by ModelChecker and is necessary only for those components that instantiate internal elements that must exist before simulation starts and even before model checking. That's the case of components that have internal StatisticsCollectors, since others components may refer to them as expressions (as in "TVAG(ThisCSTAT)") and therefore the modeldatum must exist before checking such expression */
 	// virtual void _createInternalAndAttachedData(); /*< A ModelDataDefinition or ModelComponent that includes (internal) ou refers to (attach) other ModelDataDefinition must register them inside this method. */
 	/*! This method is not used yet. It should be usefull for new UIs */
-	// virtual void _addProperty(PropertyBase* property);
+	// virtual void _addProperty(SimulationControl* property);
 
 private: /// new private user methods
 	// ...

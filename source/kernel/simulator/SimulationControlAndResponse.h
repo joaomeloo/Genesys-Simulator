@@ -4,12 +4,25 @@
 #include <sstream>
 #include <functional>
 #include <list>
+#include <stdexcept>
+#include <type_traits>
 #include "../util/Util.h"
 #include "../util/List.h"
 
 //namespace GenesysKernel {
 
 
+/**
+ * @brief Base metadata for kernel-side control/response abstractions.
+ *
+ * Historically, the experiment layer in GenESyS evolved from the basic
+ * ModelSimulation controls toward a more generic mechanism capable of exposing
+ * arbitrary getters and setters from model-related classes.
+ *
+ * Despite the legacy name, this base currently lives in the simulation kernel
+ * and supports kernel-side experiment/control abstractions rather than a
+ * user-interface property editor.
+ */
 class PropertyGenesysBase {
 public:
     PropertyGenesysBase(std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false, bool isClass=false, bool isEnum=false) {
@@ -94,10 +107,38 @@ protected:
 	bool _isSubProperty;
 };
 
-class SimulationControl: public PropertyGenesysBase {
+/**
+ * @brief Read-only kernel-side simulation response abstraction.
+ *
+ * This is the intended kernel-level base for generic getter-based access to
+ * observable model attributes, statistics and experiment responses.
+ */
+class SimulationResponse: public PropertyGenesysBase {
+public:
+    SimulationResponse(std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false, bool isClass=false, bool isEnum=false)
+        : PropertyGenesysBase(className, elementName, propertyName, whatsThis, isList, isClass, isEnum) {
+    }
+    virtual ~SimulationResponse() = default;
+public:
+	std::string show() const {
+		std::string msg = "classname="+_className+ ", elementName="+_elementName+", name=\"" + _propertyName + "\"";
+		msg += ", value="+getValue();
+		return msg;
+	}
+	virtual std::string getValue() const = 0;
+	virtual List<std::string>* getStrValues() { return nullptr; };
+};
+
+/**
+ * @brief Read/write kernel-side simulation control abstraction.
+ *
+ * SimulationControl extends SimulationResponse with setter-based mutation and
+ * therefore represents writable kernel-side experiment controls.
+ */
+class SimulationControl: public SimulationResponse {
 public:
     SimulationControl(std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false,  bool isClass=false, bool isEnum=false)
-        : PropertyGenesysBase(className, elementName, propertyName, whatsThis, isList, isClass){
+        : SimulationResponse(className, elementName, propertyName, whatsThis, isList, isClass, isEnum){
 	}
 	std::string show() const {
 		std::string msg = "classname="+_className+ ", elementName="+_elementName+", name=\""+_propertyName+"\"";
@@ -110,15 +151,71 @@ public:
 	}
 	bool isReadOnly() const { return _readonly; }
 public:
-	virtual std::string getValue() const  = 0;
     virtual void setValue(std::string value, bool remove=false) = 0;
     virtual List<SimulationControl*>* getProperties(int index=0) { return nullptr; };
-    virtual List<std::string>* getStrValues() { return nullptr; };
+    virtual bool hasObjectInstance() const { return true; }
+    virtual bool ensureObjectInstance() { return hasObjectInstance(); }
+    virtual bool isModelDataDefinitionReference() const { return false; }
+    // This method exposes whether the property should be rendered as an inline expandable object tree.
+    virtual bool supportsInlineExpansion() const { return getIsClass() && !getIsList(); }
+    // This method exposes whether the property should be edited by the dedicated list editor.
+    virtual bool supportsListEditor() const { return getIsList(); }
+    // This method exposes whether the property supports choosing an existing object instance.
+    virtual bool supportsExistingObjectSelection() const { return false; }
+    // This method exposes whether the property supports creating a new object instance.
+    virtual bool supportsObjectCreation() const { return false; }
+    // This method exposes whether the property supports typed creation of a new list element.
+    virtual bool supportsNewListElementCreation() const { return false; }
+    // This method exposes whether the property is an inline object (and not a ModelDataDefinition reference).
+    virtual bool isInlineObjectProperty() const {
+        return supportsInlineExpansion() && !isModelDataDefinitionReference();
+    }
+    // This method provides an explicit object-creation operation for class-like properties.
+    virtual bool createObjectInstance(const std::string& value = "") {
+        (void)value;
+        return false;
+    }
+    // This method provides an explicit typed list-element creation operation for list-like properties.
+    virtual bool createNewListElement(const std::string& value = "") {
+        (void)value;
+        return false;
+    }
+    virtual List<SimulationControl*>* getEditableProperties(int index=0) {
+        if (supportsInlineExpansion() && !hasObjectInstance()) {
+            if (!supportsObjectCreation()) {
+                return nullptr;
+            }
+            if (!ensureObjectInstance()) {
+                return nullptr;
+            }
+        }
+        return getProperties(index);
+    }
 protected:
-	bool _readonly;
+	void _ensureWritable(const char* operation) const {
+		if (_readonly) {
+			throw std::logic_error(std::string("Cannot ") + operation + " readonly SimulationControl \"" + _propertyName + "\"");
+		}
+	}
+	bool _readonly = false;
 };
 
 // -----------------------------------------------------------
+
+template<typename Class, typename T>
+std::function<T()> DefineSimulationGetter(Class* object, T(Class::*function)() const) {
+	return std::bind(function, object);
+}
+
+template<typename Class, typename T>
+std::function<T()> DefineSimulationGetter(Class* object, T(Class::*function)()) {
+	return std::bind(function, object);
+}
+
+template<typename Class, typename T>
+std::function<void(T)> DefineSimulationSetter(Class* object, void (Class::*function)(T)) {
+	return std::bind(function, object, std::placeholders::_1);
+}
 
 typedef std::function<std::string()> GetterString;
 typedef std::function<void(std::string)> SetterString;
@@ -135,7 +232,13 @@ public:
 	}
 public:
 	virtual std::string getValue() const override { return _getter(); }
-    virtual void setValue(std::string value, bool remove=false) override { _setter(value); };
+    virtual void setValue(std::string value, bool remove=false) override {
+		_ensureWritable("set value of");
+		if (!_setter) {
+			throw std::logic_error("SimulationControlString setter is not defined");
+		}
+		_setter(value);
+	};
 private:
 	GetterString _getter;
 	SetterString _setter;
@@ -146,6 +249,20 @@ private:
 
 typedef std::function<double()> GetterDouble;
 typedef std::function<void(double)> SetterDouble;
+
+class SimulationResponseDouble: public SimulationResponse {
+public:
+    SimulationResponseDouble(GetterDouble getter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false, bool isClass=false, bool isEnum=false)
+        : SimulationResponse(className, elementName, propertyName, whatsThis, isList, isClass, isEnum) {
+        _getter = getter;
+        _propertyType = Util::TypeOf<double>();
+    }
+public:
+    virtual std::string getValue() const override { return std::to_string(_getter()); }
+private:
+    GetterDouble _getter;
+};
+
 class SimulationControlDouble: public SimulationControl {
 public:
 //	SimulationControlDouble(GetterDouble getter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="") : SimulationControl(className, elementName, propertyName, whatsThis) {
@@ -159,7 +276,13 @@ public:
 	}
 public:
 	virtual std::string getValue() const override { return std::to_string(_getter()); }
-    virtual void setValue(std::string value, bool remove=false) override { _setter(std::stod(value)); };
+    virtual void setValue(std::string value, bool remove=false) override {
+		_ensureWritable("set value of");
+		if (!_setter) {
+			throw std::logic_error("SimulationControlDouble setter is not defined");
+		}
+		_setter(std::stod(value));
+	};
 private:
 	GetterDouble _getter;
 	SetterDouble _setter;
@@ -182,7 +305,19 @@ public:
 	}
 public:
 	virtual std::string getValue() const override { return std::to_string(_getter()); }
-    virtual void setValue(std::string value, bool remove=false) override { _setter(std::stoi(value)); };
+    virtual void setValue(std::string value, bool remove=false) override {
+		_ensureWritable("set value of");
+		if (!_setter) {
+			throw std::logic_error("SimulationControlBool setter is not defined");
+		}
+		std::istringstream auxStr(value);
+		auxStr >> std::boolalpha;
+		bool boolVal = false;
+		if (!(auxStr >> boolVal)) {
+			boolVal = std::stoi(value) != 0;
+		}
+		_setter(boolVal);
+	};
 private:
 	GetterBool _getter;
 	SetterBool _setter;
@@ -206,7 +341,13 @@ public:
 	}
 public:
 	virtual std::string getValue() const override { return std::to_string(_getter()); }
-    virtual void setValue(std::string value, bool remove=false) override { _setter(std::stoul(value)); };
+    virtual void setValue(std::string value, bool remove=false) override {
+		_ensureWritable("set value of");
+		if (!_setter) {
+			throw std::logic_error("SimulationControlUInt setter is not defined");
+		}
+		_setter(std::stoul(value));
+	};
 private:
 	GetterUInt _getter;
 	SetterUInt _setter;
@@ -221,15 +362,21 @@ public:
 //	SimulationControlUShort(GetterUShort getter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="") : SimulationControl(className, elementName, propertyName, whatsThis) {
 //		SimulationControlUShort(getter, nullptr, className, propertyName, whatsThis);
 //	}
-    SimulationControlUShort(GetterUShort getter, SetterUShort setter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false, bool isClass=false, bool isEnum=false) : SimulationControl(className, elementName, propertyName, whatsThis, isList, isClass, isEnum){
-		_getter= getter;
-		_setter = setter;
-		_readonly = setter == nullptr;
-		_propertyType = Util::TypeOf<unsigned int>();
-	}
+	    SimulationControlUShort(GetterUShort getter, SetterUShort setter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false, bool isClass=false, bool isEnum=false) : SimulationControl(className, elementName, propertyName, whatsThis, isList, isClass, isEnum){
+			_getter= getter;
+			_setter = setter;
+			_readonly = setter == nullptr;
+			_propertyType = Util::TypeOf<unsigned short>();
+		}
 public:
 	virtual std::string getValue() const override { return std::to_string(_getter()); }
-    virtual void setValue(std::string value, bool remove=false) override { _setter(std::stoul(value)); };
+    virtual void setValue(std::string value, bool remove=false) override {
+		_ensureWritable("set value of");
+		if (!_setter) {
+			throw std::logic_error("SimulationControlUShort setter is not defined");
+		}
+		_setter(std::stoul(value));
+	};
 private:
 	GetterUShort _getter;
 	SetterUShort _setter;
@@ -245,15 +392,21 @@ public:
 //	SimulationControlInt(GetterInt getter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="") : SimulationControl(className, elementName, propertyName, whatsThis) {
 //		SimulationControlInt(getter, nullptr, className, propertyName, whatsThis);
 //	}
-    SimulationControlInt(GetterInt getter, SetterInt setter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false, bool isClass=false, bool isEnum=false) : SimulationControl(className, elementName, propertyName, whatsThis, isList, isClass, isEnum){
-		_getter= getter;
-		_setter = setter;
-		_readonly = setter == nullptr;
-		_propertyType = Util::TypeOf<unsigned int>();
-	}
+	    SimulationControlInt(GetterInt getter, SetterInt setter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false, bool isClass=false, bool isEnum=false) : SimulationControl(className, elementName, propertyName, whatsThis, isList, isClass, isEnum){
+			_getter= getter;
+			_setter = setter;
+			_readonly = setter == nullptr;
+			_propertyType = Util::TypeOf<int>();
+		}
 public:
 	virtual std::string getValue() const override { return std::to_string(_getter()); }
-    virtual void setValue(std::string value, bool remove=false) override { _setter(std::stoi(value)); };
+    virtual void setValue(std::string value, bool remove=false) override {
+		_ensureWritable("set value of");
+		if (!_setter) {
+			throw std::logic_error("SimulationControlInt setter is not defined");
+		}
+		_setter(std::stoi(value));
+	};
 private:
 	GetterInt _getter;
 	SetterInt _setter;
@@ -280,6 +433,10 @@ public:
 		return std::to_string(intVal);
 	}
     virtual void setValue(std::string value, bool remove=false) override {
+		_ensureWritable("set value of");
+		if (!_setter) {
+			throw std::logic_error("SimulationControlTimeUnit setter is not defined");
+		}
 		int intVal = std::stoul(value);
 		_setter(static_cast<Util::TimeUnit>(intVal));
     };
@@ -289,6 +446,9 @@ private:
 };
 
 
+// TODO(genesys|kernel-controls|migration): This compatibility alias keeps the current
+// kernel API working while the codebase migrates from the legacy PropertyBase
+// naming toward explicit SimulationResponse/SimulationControl types.
 typedef SimulationControl PropertyBase;
 
 // -----------------------------------------------------------
@@ -324,6 +484,10 @@ public:
 	}
 
     virtual void setValue(std::string value, bool remove=false) override {
+		_ensureWritable("set value of");
+		if (!_setter) {
+			throw std::logic_error("SimulationControlGeneric setter is not defined");
+		}
 		std::istringstream auxStr(value);
 		T tVal;
 		auxStr >> tVal;
@@ -341,6 +505,7 @@ template <typename T, typename E>
 class SimulationControlGenericEnum: public SimulationControl {
 public:
     SimulationControlGenericEnum(GetterGeneric<T> getter, SetterGeneric<T> setter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false, bool isClass=false, bool isEnum=true) : SimulationControl(className, elementName, propertyName, whatsThis, isList, isClass, isEnum){
+		static_assert(std::is_enum<T>::value, "SimulationControlGenericEnum requires T to be an enum");
 		_getter= getter;
 		_setter = setter;
 		_readonly = setter == nullptr;
@@ -350,27 +515,18 @@ public:
 public:
 	virtual std::string getValue() const override {
 		int intVal = static_cast<int>(_getter());
-
-        // get string value of enum
-        // TODO: call the function getStrValues
-        List<std::string>* strOptions = new List<std::string>();
-        int max_i = static_cast<int>(T::num_elements);;
-        for (int i=0; i<max_i; i++) {
-            std::string value = E::convertEnumToStr((T)i);
-            strOptions->insert(value);
-        }
-
-        int current_index = 0;
-        for (auto element : *strOptions->list()){
-            if (current_index == intVal) {
-                return element;
-            }
-            current_index++;
-        }
-        return "";
+		int max_i = static_cast<int>(T::num_elements);
+		if (intVal < 0 || intVal >= max_i) {
+			return "";
+		}
+		return E::convertEnumToStr(static_cast<T>(intVal));
 	}
 
-    virtual void setValue(std::string value, bool remove=false) override {
+	    virtual void setValue(std::string value, bool remove=false) override {
+		_ensureWritable("set value of");
+		if (!_setter) {
+			throw std::logic_error("SimulationControlGenericEnum setter is not defined");
+		}
 		int intVal = std::stoul(value);
 		_setter(static_cast<T>(intVal));
 	};
@@ -394,10 +550,13 @@ private:
 template <typename T, typename M, typename C>
 class SimulationControlGenericClass: public SimulationControl {
 public:
-    SimulationControlGenericClass(M model, GetterGeneric<T> getter, SetterGeneric<T> setter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false, bool isClass=true, bool isEnum=false) : SimulationControl(className, elementName, propertyName, whatsThis, isList, isClass, isEnum){
+    using Creator = std::function<T(M, const std::string&)>;
+    SimulationControlGenericClass(M model, GetterGeneric<T> getter, SetterGeneric<T> setter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false, bool isClass=true, bool isEnum=false, Creator creator=nullptr) : SimulationControl(className, elementName, propertyName, whatsThis, isList, isClass, isEnum){
+		static_assert(std::is_pointer<T>::value, "SimulationControlGenericClass requires pointer type T");
 		_model = model;
 		_getter= getter;
 		_setter = setter;
+        _creator = creator;
 		_readonly = setter == nullptr;
 		_propertyType = Util::TypeOf<C>();
 	}
@@ -416,6 +575,10 @@ public:
 	}
 
     virtual void setValue(std::string value, bool remove=false) override {
+		_ensureWritable("set value of");
+		if (!_setter) {
+			throw std::logic_error("SimulationControlGenericClass setter is not defined");
+		}
 		bool exists = false;
         // value.pop_back();
 		T newVal;
@@ -429,12 +592,52 @@ public:
         };
 
 		if (!exists) {
-			newVal = new C(_model, value);
+            if (_creator != nullptr) {
+                newVal = _creator(_model, value);
+            } else {
+			    newVal = new C(_model, value);
+            }
+            if (newVal == nullptr) {
+                throw std::logic_error("SimulationControlGenericClass creator returned null");
+            }
 		 	_model->getDataManager()->insert(newVal);
-		};
+		}
 
 		_setter(newVal);
 	};
+
+    virtual bool isModelDataDefinitionReference() const override { return true; }
+    // This method marks class references as inline-expandable in the universal contract.
+    virtual bool supportsInlineExpansion() const override { return true; }
+    // This method marks class references as selectable from existing ModelDataDefinition instances.
+    virtual bool supportsExistingObjectSelection() const override { return true; }
+    // This method marks class references as creatable when writable.
+    virtual bool supportsObjectCreation() const override { return !_readonly; }
+    // This method marks class references as non-inline object payloads.
+    virtual bool isInlineObjectProperty() const override { return false; }
+    // This method performs explicit object creation for class references.
+    virtual bool createObjectInstance(const std::string& value = "") override {
+        _ensureWritable("create instance for");
+        std::string name = value;
+        if (name.empty()) {
+            name = getValue();
+        }
+        if (name.empty()) {
+            return false;
+        }
+        setValue(name, false);
+        return hasObjectInstance();
+    }
+
+    virtual List<std::string>* getStrValues() override {
+        List<std::string>* strOptions = new List<std::string>();
+        for (auto modeldata : *_model->getDataManager()->getDataDefinitionList(_propertyType)->list()) {
+            if (modeldata != nullptr) {
+                strOptions->insert(modeldata->getName());
+            }
+        }
+        return strOptions;
+    }
 
     virtual List<SimulationControl*>* getProperties(int index=0) override {
         T tVal = static_cast<T>(_getter());
@@ -450,16 +653,22 @@ private:
 	M _model;
 	GetterGeneric<T> _getter;
 	SetterGeneric<T> _setter;
+    Creator _creator;
 };
 
 // TODO: remove typename C
 template <typename T, typename M, typename C>
 class SimulationControlGenericClassNotDC: public SimulationControl {
 public:
-    SimulationControlGenericClassNotDC(M model, GetterGeneric<T> getter, SetterGeneric<T> setter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false, bool isClass=true, bool isEnum=false) : SimulationControl(className, elementName, propertyName, whatsThis, isList, isClass, isEnum){
+    using Creator = std::function<T(M)>;
+    using NamedCreator = std::function<T(M, const std::string&)>;
+    SimulationControlGenericClassNotDC(M model, GetterGeneric<T> getter, SetterGeneric<T> setter, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=false, bool isClass=true, bool isEnum=false, Creator creator=nullptr, NamedCreator namedCreator=nullptr) : SimulationControl(className, elementName, propertyName, whatsThis, isList, isClass, isEnum){
+		static_assert(std::is_pointer<T>::value, "SimulationControlGenericClassNotDC requires pointer type T");
         _model = model;
         _getter= getter;
         _setter = setter;
+        _creator = creator;
+        _namedCreator = namedCreator;
         _readonly = setter == nullptr;
         _propertyType = Util::TypeOf<C>();
     }
@@ -478,15 +687,49 @@ public:
     }
 
     virtual void setValue(std::string value, bool remove=false) override {
-        bool exists = false;
-        // value.pop_back();
-        T newVal;
-
-        // TODO: criar apenas se já não estiver definido?
-        newVal = new C(_model, value);
+		_ensureWritable("set value of");
+		if (!_setter) {
+			throw std::logic_error("SimulationControlGenericClassNotDC setter is not defined");
+		}
+        T newVal = _createNewInstance(value);
 
         _setter(newVal);
     };
+
+    virtual bool hasObjectInstance() const override {
+        return static_cast<T>(_getter()) != nullptr;
+    }
+    // This method marks inline class payloads as expandable in the universal contract.
+    virtual bool supportsInlineExpansion() const override { return true; }
+    // This method marks inline class payloads as creatable when writable.
+    virtual bool supportsObjectCreation() const override { return !_readonly; }
+    // This method marks inline class payloads as non-reference object payloads.
+    virtual bool isInlineObjectProperty() const override { return true; }
+
+    virtual bool ensureObjectInstance() override {
+		_ensureWritable("ensure instance of");
+		if (!_setter) {
+			throw std::logic_error("SimulationControlGenericClassNotDC setter is not defined");
+		}
+
+        T current = static_cast<T>(_getter());
+        if (current != nullptr) {
+            return true;
+        }
+
+        T newVal;
+        newVal = _createNewInstance("");
+        _setter(newVal);
+        return static_cast<T>(_getter()) != nullptr;
+    }
+    // This method performs explicit object creation for non-DataManager classes.
+    virtual bool createObjectInstance(const std::string& value = "") override {
+        if (value.empty()) {
+            return ensureObjectInstance();
+        }
+        setValue(value, false);
+        return hasObjectInstance();
+    }
 
     virtual List<SimulationControl*>* getProperties(int index=0) override {
         T tVal = static_cast<T>(_getter());
@@ -499,9 +742,22 @@ public:
     }
 
 private:
+    T _createNewInstance(const std::string& value) const {
+        if (_namedCreator != nullptr) {
+            return _namedCreator(_model, value);
+        }
+        if (_creator != nullptr) {
+            return _creator(_model);
+        }
+        return new C(_model, value);
+    }
+
+private:
     M _model;
     GetterGeneric<T> _getter;
     SetterGeneric<T> _setter;
+    Creator _creator;
+    NamedCreator _namedCreator;
 };
 
 template <typename T, typename M, typename C>
@@ -524,22 +780,32 @@ public:
 	}
 
     virtual void setValue(std::string value, bool remove=false) override {
+		_ensureWritable(remove ? "remove value from" : "add value to");
         T newVal;
 
         std::istringstream auxStr(value);
         auxStr >> newVal;
         newVal = static_cast<T>(newVal);
 
-        if (remove) {
-            _remover(newVal);
-        } else {
-            bool exists = false;
-            for (auto element : *getStrValues()->list()) {
-                if (value == element) {
-                    exists = true;
-                    break;
-                }
-            }
+	        if (remove) {
+				if (!_remover) {
+					throw std::logic_error("SimulationControlGenericList remover is not defined");
+				}
+	            _remover(newVal);
+	        } else {
+				if (!_adder) {
+					throw std::logic_error("SimulationControlGenericList adder is not defined");
+				}
+	            bool exists = false;
+				List<T>* tVal = static_cast<List<T>*>(_getter());
+	            for (auto element : *tVal->list()) {
+					std::ostringstream auxElement;
+					auxElement << element;
+	                if (value == auxElement.str()) {
+	                    exists = true;
+	                    break;
+	                }
+	            }
 
             if (!exists) {
                 _adder(newVal);
@@ -561,6 +827,8 @@ public:
         }
         return strOptions;
     }
+    // This method marks scalar lists as editable through the list editor in the universal contract.
+    virtual bool supportsListEditor() const override { return true; }
 
 private:
 	M _model;
@@ -572,11 +840,16 @@ private:
 template <typename T, typename M, typename C>
 class SimulationControlGenericListPointer: public SimulationControl {
 public:
-    SimulationControlGenericListPointer(M model, GetterGeneric<List<T>*> getter, AdderGeneric<T> adder, RemoverGeneric<T> remover, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=true, bool isClass=true, bool isEnum=false) : SimulationControl(className, elementName, propertyName, whatsThis, isList, isClass, isEnum){
+    using Creator = std::function<T(M, const std::string&)>;
+    using TypedCreator = std::function<T(M)>;
+    SimulationControlGenericListPointer(M model, GetterGeneric<List<T>*> getter, AdderGeneric<T> adder, RemoverGeneric<T> remover, std::string className, std::string elementName, std::string propertyName, std::string whatsThis="", bool isList=true, bool isClass=true, bool isEnum=false, Creator creator=nullptr, TypedCreator typedCreator=nullptr) : SimulationControl(className, elementName, propertyName, whatsThis, isList, isClass, isEnum){
+		static_assert(std::is_pointer<T>::value, "SimulationControlGenericListPointer requires pointer type T");
         _model = model;
         _getter= getter;
         _adder = adder;
         _remover = remover;
+        _creator = creator;
+        _typedCreator = typedCreator;
         _readonly = adder == nullptr;
         _propertyType = Util::TypeOf<C>();
     }
@@ -588,30 +861,56 @@ public:
         return strVal;
     }
 
-    virtual void setValue(std::string value, bool remove=false) override {
-        T newVal;
-        newVal = new C(_model, value);
+	    virtual void setValue(std::string value, bool remove=false) override {
+		_ensureWritable(remove ? "remove value from" : "add value to");
+		List<T>* tVal = static_cast<List<T>*>(_getter());
+		T existingVal = nullptr;
+		for (auto element : *tVal->list()) {
+			if (element != nullptr && element->getName() == value) {
+				existingVal = element;
+				break;
+			}
+		}
 
-        if (remove) {
-            _remover(newVal);
-        } else {
-            bool exists = false;
-            for (auto element : *getStrValues()->list()) {
-                if (value == element) {
-                    exists = true;
-                    break;
-                }
-            }
-
-            if (!exists) {
-                _adder(newVal);
+	        if (remove) {
+				if (!_remover) {
+					throw std::logic_error("SimulationControlGenericListPointer remover is not defined");
+				}
+				if (existingVal != nullptr) {
+					_remover(existingVal);
+				}
+	        } else {
+				if (!_adder) {
+					throw std::logic_error("SimulationControlGenericListPointer adder is not defined");
+				}
+	            if (existingVal == nullptr) {
+                    if (!createNewListElement(value)) {
+                        throw std::logic_error("SimulationControlGenericListPointer could not create a new list element");
+                    }
             }
         }
     };
+    // This method marks pointer lists as editable through the list editor in the universal contract.
+    virtual bool supportsListEditor() const override { return true; }
+    // This method marks pointer lists as supporting explicit typed element creation when writable.
+    virtual bool supportsNewListElementCreation() const override { return !_readonly; }
+    // This method creates and inserts a typed list element using the configured creator or the default constructor path.
+    virtual bool createNewListElement(const std::string& value = "") override {
+        _ensureWritable("create list element for");
+        if (!_adder) {
+            throw std::logic_error("SimulationControlGenericListPointer adder is not defined");
+        }
+        T newVal = _createElement(value);
+        if (newVal == nullptr) {
+            return false;
+        }
+        _adder(newVal);
+        return true;
+    }
 
-    virtual List<SimulationControl*>* getProperties(int index=0) override {
-        List<T>* tVal = static_cast<List<T>*>(_getter());
-        T selectedElement;
+	    virtual List<SimulationControl*>* getProperties(int index=0) override {
+	        List<T>* tVal = static_cast<List<T>*>(_getter());
+	        T selectedElement = nullptr;
 
         int current_index = 0;
         for (auto element : *tVal->list()) {
@@ -646,10 +945,23 @@ public:
     }
 
 private:
+    T _createElement(const std::string& value) const {
+        if (_typedCreator != nullptr) {
+            return _typedCreator(_model);
+        }
+        if (_creator != nullptr) {
+            return _creator(_model, value);
+        }
+        return new C(_model, value);
+    }
+
+private:
     M _model;
     GetterGeneric<List<T>*> _getter;
     AdderGeneric<T> _adder;
     RemoverGeneric<T> _remover;
+    Creator _creator;
+    TypedCreator _typedCreator;
 };
 
 //namespace\\}

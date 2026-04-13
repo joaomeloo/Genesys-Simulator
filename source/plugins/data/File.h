@@ -63,6 +63,13 @@ recordset refers.
  */
 class File : public ModelDataDefinition {
 public:
+	enum class AccessMode : unsigned int {
+		Read = 0,
+		Write = 1,
+		Append = 2,
+		ReadWrite = 3
+	};
+
 	File(Model* model, std::string name = "");
 	virtual ~File() = default;
 public: // static
@@ -70,16 +77,38 @@ public: // static
 	static PluginInformation* GetPluginInformation();
 	static ModelDataDefinition* NewInstance(Model* model, std::string name = "");
 public:
-	virtual std::string show();
+	void setSystemFilename(std::string systemFilename);
+	std::string getSystemFilename() const;
+	std::string getFilenameOnly() const;
+	std::string getPathOnly() const;
+
+	void setAccessMode(AccessMode accessMode);
+	AccessMode getAccessMode() const;
+	void setAccessModeAsString(std::string accessMode);
+	std::string getAccessModeAsString() const;
+
+	virtual std::string show() override;
 
 protected: // must be overriden 
-	virtual bool _loadInstance(PersistenceRecord *fields);
-	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues);
+	virtual bool _loadInstance(PersistenceRecord *fields) override;
+	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues) override;
 protected: // could be overriden 
-	virtual bool _check(std::string& errorMessage);
-	virtual ParserChangesInformation* _getParserChangesInformation();
+	virtual bool _check(std::string& errorMessage) override;
+	virtual ParserChangesInformation* _getParserChangesInformation() override;
 
+private:
+	static std::string _accessModeToString(AccessMode accessMode);
+	static bool _stringToAccessMode(const std::string& accessMode, AccessMode* parsedAccessMode);
+	static std::string _normalizePathSeparators(const std::string& filename);
+
+private:
+	const struct DEFAULT_VALUES {
+		std::string systemFilename = "";
+		AccessMode accessMode = AccessMode::Read;
+	} DEFAULT;
+	std::string _systemFilename = DEFAULT.systemFilename;
+	AccessMode _accessMode = DEFAULT.accessMode;
+	bool _accessModeWasInvalid = false;
 };
 
 #endif /* FILE_H */
-

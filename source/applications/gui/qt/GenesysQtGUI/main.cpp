@@ -2,13 +2,87 @@
 #include <QApplication>
 //#include <QDesktopWidget> //removed from qt6
 #include <QScreen>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QStandardPaths>
+#include <QTextStream>
+#include <exception>
+#include <iostream>
+#include <cstdlib>
+#include <execinfo.h>
 
 #include "../../../GenesysApplication_if.h"
 #include "../../../TraitsApp.h"
 #include "../../../terminal/TraitsTerminalApp.h"
 #include "TraitsGUI.h"
+#include "GuiCrashDiagnostics.h"
+
+namespace {
+QMutex _logMutex;
+QString _logPath;
+
+QString _defaultLogPath() {
+    QString basePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (basePath.isEmpty()) {
+        basePath = QDir::homePath() + "/.genesys";
+    }
+    QDir baseDir(basePath);
+    baseDir.mkpath(".");
+    return baseDir.absoluteFilePath("GenesysQtGUI.log");
+}
+
+void _appendLogLine(const QString& line) {
+    QMutexLocker locker(&_logMutex);
+    QFile file(_logPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+        std::cerr << line.toStdString() << std::endl;
+        return;
+    }
+    QTextStream stream(&file);
+    stream << line << Qt::endl;
+}
+
+void _qtMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg) {
+    const QString line = qFormatLogMessage(type, context, msg);
+    _appendLogLine(line);
+    std::cerr << line.toStdString() << std::endl;
+    if (type == QtFatalMsg) {
+        abort();
+    }
+}
+
+void _terminateHandler() {
+    _appendLogLine(QString("[%1] [FATAL] std::terminate invoked").arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs)));
+    void *trace[64];
+    int size = backtrace(trace, 64);
+    char **messages = backtrace_symbols(trace, size);
+    if (messages != nullptr) {
+        for (int i = 0; i < size; ++i) {
+            _appendLogLine(QString("  at %1").arg(messages[i]));
+        }
+        free(messages);
+    }
+    std::_Exit(EXIT_FAILURE);
+}
+
+void _installCrashAndLogHandlers() {
+    // Installs temporary fatal-signal crash diagnostics before GUI startup.
+    GuiCrashDiagnostics::installFatalSignalHandlers();
+    qSetMessagePattern("[%{time yyyy-MM-ddTHH:mm:ss.zzz}] [%{if-debug}DEBUG%{endif}%{if-info}INFO%{endif}%{if-warning}WARN%{endif}%{if-critical}CRITICAL%{endif}%{if-fatal}FATAL%{endif}] [tid:%{threadid}] [%{file}:%{line}] [%{function}] %{message}");
+    _logPath = _defaultLogPath();
+    _appendLogLine(QString("[%1] [INFO] Logging started at %2")
+                   .arg(QDateTime::currentDateTime().toString(Qt::ISODateWithMs), _logPath));
+    qInstallMessageHandler(_qtMessageHandler);
+    std::set_terminate(_terminateHandler);
+}
+}
 
 int mainGraphicQtApp(int argc, char *argv[]) {
+    _installCrashAndLogHandlers();
 	QApplication a(argc, argv);
 	MainWindow w;
     if constexpr (TraitsGUI<GMainWindow>::startMaximized) {
@@ -64,4 +138,3 @@ int main(int argc, char *argv[]) {
 	}
 }
 */
-

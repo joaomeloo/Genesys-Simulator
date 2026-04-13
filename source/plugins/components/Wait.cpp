@@ -137,11 +137,11 @@ void Wait::_onDispatchEvent(Entity* entity, unsigned int inputPortNumber) {
 	if (_waitType == Wait::WaitType::WaitForSignal) {
 		message += " for signal \"" + _signalData->getName() + "\"";
 	} else if (_waitType == Wait::WaitType::ScanForCondition) {
-		message += " until codition \"" + _condition + "\" is true";
-	} else if (_waitType == Wait::WaitType::ScanForCondition) {
+		message += " until condition \"" + _condition + "\" is true";
+	} else if (_waitType == Wait::WaitType::InfiniteHold) {
 		message += " indefinitely";
 	}
-	_parentModel->getTracer()->traceSimulation(this, _parentModel->getSimulation()->getSimulatedTime(), entity, this, message);
+	traceSimulation(this, _parentModel->getSimulation()->getSimulatedTime(), entity, this, message);
 	Waiting* waiting = new Waiting(entity, _parentModel->getSimulation()->getSimulatedTime(), this);
 	_queue->insertElement(waiting);
 }
@@ -149,30 +149,69 @@ void Wait::_onDispatchEvent(Entity* entity, unsigned int inputPortNumber) {
 bool Wait::_loadInstance(PersistenceRecord *fields) {
 	bool res = ModelComponent::_loadInstance(fields);
 	if (res) {
-		// @TODO: not implemented yet
+		_waitType = static_cast<Wait::WaitType>(fields->loadField("waitType", static_cast<int>(DEFAULT.waitType)));
+		_condition = fields->loadField("condition", DEFAULT.condition);
+		limitExpression = fields->loadField("limitExpression", DEFAULT.limitExpression);
+		std::string queueName = fields->loadField("queue", "");
+		if (queueName != "") {
+			_queue = dynamic_cast<Queue*>(_parentModel->getDataManager()->getDataDefinition(Util::TypeOf<Queue>(), queueName));
+		}
+		std::string signalName = fields->loadField("signalData", "");
+		if (signalName != "") {
+			_signalData = dynamic_cast<SignalData*>(_parentModel->getDataManager()->getDataDefinition(Util::TypeOf<SignalData>(), signalName));
+		}
 	}
 	return res;
 }
 
 void Wait::_saveInstance(PersistenceRecord *fields, bool saveDefaultValues) {
 	ModelComponent::_saveInstance(fields, saveDefaultValues);
-	// @TODO: not implemented yet
+	fields->saveField("waitType", static_cast<int>(_waitType), static_cast<int>(DEFAULT.waitType), saveDefaultValues);
+	fields->saveField("condition", _condition, DEFAULT.condition, saveDefaultValues);
+	fields->saveField("limitExpression", limitExpression, DEFAULT.limitExpression, saveDefaultValues);
+	if (_queue != nullptr) {
+		fields->saveField("queue", _queue->getName(), "", saveDefaultValues);
+	}
+	if (_waitType == WaitType::WaitForSignal && _signalData != nullptr) {
+		fields->saveField("signalData", _signalData->getName(), "", saveDefaultValues);
+	}
 }
 
 // protected virtual could override
 
 bool Wait::_check(std::string& errorMessage) {
 	bool resultAll = true;
-	if (_waitType == Wait::WaitType::ScanForCondition) {
+	if (_queue == nullptr) {
+		errorMessage += "Queue is null in Wait \"" + this->getName() + "\"";
+		return false;
+	}
+	if (_waitType == Wait::WaitType::WaitForSignal) {
+		// Wait/Signal operational contract is based on a shared SignalData instance.
+		if (_signalData == nullptr) {
+			errorMessage += "SignalData is null for WaitForSignal in Wait \"" + this->getName() + "\"";
+			resultAll = false;
+		}
+		if (!_parentModel->checkExpression(limitExpression, "LimitExpression", errorMessage)) {
+			resultAll = false;
+		}
+	} else if (_waitType == Wait::WaitType::ScanForCondition) {
 		resultAll = _parentModel->checkExpression(_condition, "Condition", errorMessage);
-		if (resultAll) { // add handler to event AfterProcessEvent
+		if (resultAll && !_isScanConditionHandlerRegistered) { // local guard to avoid duplicate registration on re-checks
 			_parentModel->getOnEventManager()->addOnAfterProcessEventHandler(this, &Wait::_handlerForAfterProcessEventEvent);
+			_isScanConditionHandlerRegistered = true;
 		}
 	}
 	return resultAll;
 }
 
 void Wait::_createInternalAndAttachedData() {
+	SignalData* previouslyAttachedSignalData = nullptr;
+	std::map<std::string, ModelDataDefinition*>* attachedData = getAttachedData();
+	std::map<std::string, ModelDataDefinition*>::iterator attachedSignalDataIt = attachedData->find("SignalData");
+	if (attachedSignalDataIt != attachedData->end()) {
+		previouslyAttachedSignalData = dynamic_cast<SignalData*>(attachedSignalDataIt->second);
+	}
+
 	// internal
 	PluginManager* pm = _parentModel->getParentSimulator()->getPluginManager();
 	if (_queue == nullptr) {
@@ -180,6 +219,10 @@ void Wait::_createInternalAndAttachedData() {
 	}
 	_internalDataInsert("Queue", _queue);
 	//attached
+	if (previouslyAttachedSignalData != nullptr && (_waitType != Wait::WaitType::WaitForSignal || previouslyAttachedSignalData != _signalData)) {
+		previouslyAttachedSignalData->removeSignalDataEventHandler(this);
+	}
+
 	if (_waitType == Wait::WaitType::WaitForSignal) {
 		if (_signalData == nullptr) {
 			_signalData = pm->newInstance<SignalData>(_parentModel);
@@ -201,31 +244,37 @@ void Wait::_initBetweenReplications() {
 unsigned int Wait::_handlerForSignalDataEvent(SignalData* signalData) {
 	unsigned int freed = 0;
 	unsigned int waitLimit = _parentModel->parseExpression(limitExpression);
-	while (_queue->size() > 0 && signalData->remainsToLimit() > 0 &&  freed <= waitLimit) {
+	// Stop when either global signal limit or local wait limit is reached.
+	while (_queue->size() > 0 && signalData->remainsToLimit() > 0 && freed < waitLimit) {
 		Waiting* w = _queue->getAtRank(0);
+		Entity* ent = w->getEntity();
+		ModelComponent* sourceComponent = w->geComponent();
 		_queue->removeElement(w);
 		freed++;
 		signalData->decreaseRemainLimit();
-		Entity* ent = w->getEntity();
 		std::string message = getName() + " received " + signalData->getName() + ". " + ent->getName() + " removed from " + _queue->getName() + ". " + std::to_string(freed) + " freed, " + std::to_string(signalData->remainsToLimit()) + " remaining";
-		_parentModel->getTracer()->traceSimulation(this, TraceManager::Level::L8_detailed, _parentModel->getSimulation()->getSimulatedTime(), ent, this, message);
-		_parentModel->sendEntityToComponent(w->getEntity(), w->geComponent()->getConnectionManager()->getFrontConnection());
+        traceSimulation(this, _parentModel->getSimulation()->getSimulatedTime(), ent, this, message);
+		_parentModel->sendEntityToComponent(ent, sourceComponent->getConnectionManager()->getFrontConnection());
 	}
 	return freed;
 }
 
 void Wait::_handlerForAfterProcessEventEvent(SimulationEvent* event) {
+	if (_waitType != Wait::WaitType::ScanForCondition) {
+		return;
+	}
 	double result = _parentModel->parseExpression(_condition);
 	//std::string message = "Condition \"" + _condition + "\" evaluates to " + std::to_string(result);
 	//traceSimulation(this, TraceManager::Level::L7_internal, _parentModel->getSimulation()->getSimulatedTime(), event->getCurrentEvent()->getEntity(), this, message);
 	if (result) { // condition is true. Remove entities from the queue
 		while (_queue->size() > 0) {
 			Waiting* w = _queue->getAtRank(0);
-			_queue->removeElement(w);
 			Entity* ent = w->getEntity();
+			ModelComponent* sourceComponent = w->geComponent();
+			_queue->removeElement(w);
 			std::string message = getName() + " evaluated condition " + _condition + " as true. " + ent->getName() + " removed from " + _queue->getName();
-			_parentModel->getTracer()->traceSimulation(this, TraceManager::Level::L8_detailed, _parentModel->getSimulation()->getSimulatedTime(), ent, this, message);
-			_parentModel->sendEntityToComponent(w->getEntity(), w->geComponent()->getConnectionManager()->getFrontConnection());
+            traceSimulation(this, _parentModel->getSimulation()->getSimulatedTime(), ent, this, message, TraceManager::Level::L8_detailed);
+			_parentModel->sendEntityToComponent(ent, sourceComponent->getConnectionManager()->getFrontConnection());
 		}
 
 	}

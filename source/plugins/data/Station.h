@@ -66,7 +66,7 @@ public:
 	Station(Model* model, std::string name = "");
 	virtual ~Station();
 public:
-	virtual std::string show();
+	virtual std::string show() override;
 public: // static 
 	static PluginInformation* GetPluginInformation();
 	static ModelDataDefinition* LoadInstance(Model* model, PersistenceRecord *fields);
@@ -78,17 +78,18 @@ public:
 	void setEnterIntoStationComponent(ModelComponent* _enterIntoStationComponent);
 	ModelComponent* getEnterIntoStationComponent() const;
 protected:
-	virtual bool _loadInstance(PersistenceRecord *fields);
-	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues);
-	virtual bool _check(std::string& errorMessage);
-	virtual void _createInternalAndAttachedData();
+	virtual bool _loadInstance(PersistenceRecord *fields) override;
+	virtual void _saveInstance(PersistenceRecord *fields, bool saveDefaultValues) override;
+	virtual bool _check(std::string& errorMessage) override;
+	virtual void _createInternalAndAttachedData() override;
+	virtual void _initBetweenReplications() override;
 private:
 	unsigned int _numberInStation = 0;
 	ModelComponent* _enterIntoStationComponent;
 private: // inner elements
 	StatisticsCollector* _cstatNumberInStation = nullptr;
 	StatisticsCollector* _cstatTimeInStation = nullptr;
+	friend class StationTestProbe;
 };
 
 #endif /* STATION_H */
-

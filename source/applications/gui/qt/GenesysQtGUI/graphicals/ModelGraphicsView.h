@@ -37,6 +37,7 @@
 #include <QColor>
 #include <QStyle>
 #include <QGraphicsSceneMouseEvent>
+#include <QPainter>
 #include "graphicals/ModelGraphicsScene.h"
 #include "propertyeditor/DataComponentProperty.h"
 #include "propertyeditor/DataComponentEditor.h"
@@ -81,7 +82,7 @@ public: // events and notifications
 		this->_sceneMouseEventHandler = handlerMethod;
 	}
 
-    template<typename Class> void setGraphicalModelEventHandler(Class * object, void (Class::*function)(GraphicalModelEvent*)) {
+    template<typename Class> void setGraphicalModelEventHandler(Class * object, void (Class::*function)(const GraphicalModelEvent&)) {
 		sceneGraphicalModelEventHandlerMethod handlerMethod = std::bind(function, object, std::placeholders::_1);
 		this->_sceneGraphicalModelEventHandler = handlerMethod;
     }
@@ -99,9 +100,18 @@ public: // events and notifications
     void notifySceneMouseEventHandler(QGraphicsSceneMouseEvent* mouseEvent);
     void notifySceneWheelInEventHandler();
     void notifySceneWheelOutEventHandler();
-    void notifySceneGraphicalModelEventHandler(GraphicalModelEvent* modelGraphicsEvent);
+    void notifySceneGraphicalModelEventHandler(const GraphicalModelEvent& modelGraphicsEvent);
     void setCanNotifyGraphicalModelEventHandlers(bool can);
+    void clearEventHandlers();
     void setParentWidget(QWidget *parentWidget);
+    // Enables or disables ruler rendering over the graphics viewport.
+    void setRuleVisible(bool visible);
+    // Informs if ruler rendering is active for action synchronization.
+    bool isRuleVisible() const;
+    // Enables or disables guide line rendering over the graphics viewport.
+    void setGuidesVisible(bool visible);
+    // Informs if guide line rendering is active for action synchronization.
+    bool isGuidesVisible() const;
 protected:// slots:
     void changed(const QList<QRectF> &region);
     void focusItemChanged(QGraphicsItem *newFocusItem, QGraphicsItem *oldFocusItem, Qt::FocusReason reason);
@@ -130,12 +140,12 @@ protected: // virtual functions
     //virtual void showEvent(QShowEvent *event) override;
     //virtual bool viewportEvent(QEvent *event) override;
     virtual void wheelEvent(QWheelEvent *event) override;
-private:
-    QColor myrgba(uint64_t color); // TODO: Should NOT be here, but in UtilGUI.h, but then it generates multiple definitions error
+    // Draws optional rulers and guides using the current visible scene rectangle.
+    virtual void drawForeground(QPainter *painter, const QRectF &rect) override;
 private:
 	typedef std::function<void(QGraphicsSceneMouseEvent*) > sceneMouseEventHandlerMethod;
     typedef std::function<void()> sceneWheelEventHandlerMethod;
-    typedef std::function<void(GraphicalModelEvent*) > sceneGraphicalModelEventHandlerMethod;
+    typedef std::function<void(const GraphicalModelEvent&)> sceneGraphicalModelEventHandlerMethod;
     sceneMouseEventHandlerMethod _sceneMouseEventHandler;
     sceneWheelEventHandlerMethod _sceneWheelInEventHandler;
     sceneWheelEventHandlerMethod _sceneWheelOutEventHandler;
@@ -147,7 +157,8 @@ private:
     std::map<SimulationControl*, ComboBoxEnum*>* _propertyBox = nullptr;
     QWidget* _parentWidget;
     bool _notifyGraphicalModelEventHandlers = true;
+    bool _ruleVisible = false;
+    bool _guidesVisible = false;
 };
 
 #endif /* QMODELGRAPHICVIEW_H */
-

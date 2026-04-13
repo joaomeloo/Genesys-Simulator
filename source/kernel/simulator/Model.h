@@ -6,7 +6,7 @@
 
 /*
  * File:   SimulationModel.h
- * Author: rafael.luiz.cancian
+ * Author: Prof. Rafael Luiz Cancian, Dr. Eng.
  *
  * Created on 21 de Junho de 2018, 15:01
  */
@@ -28,8 +28,7 @@
 #include "OnEventManager.h"
 #include "ModelInfo.h"
 #include "ModelSimulation.h"
-//for PAN
-#include "PropertyGenesys.h"
+#include "SimulationControlAndResponse.h"
 
 //namespace GenesysKernel {
 class Simulator;
@@ -43,7 +42,7 @@ class Simulator;
 class Model {
 public:
 	Model(Simulator* simulator, unsigned int level = 0);
-	virtual ~Model() = default;
+	virtual ~Model();
 public: // model control
 	//void showReports();
 	/*!
@@ -142,6 +141,13 @@ public: // model control
 	 * \param referencedDataDefinitions
 	 */
 	void checkReferencesToDataDefinitions(std::string expression, std::map<std::string, std::list<std::string>*>* referencedDataDefinitions);
+    /*!
+     */
+    void clearOrphanedDataDefinitions();
+    /*!
+     */
+    void createInternalDataDefinitions();
+
 public: // only gets
 	/*!
 	 * \brief getId
@@ -199,7 +205,7 @@ public: // only gets
 	 * \brief getResponses
 	 * \return
 	 */
-	List<SimulationControl*>* getResponses() const; //!< Returns a list of exits or simulation results that can be read externally. They usually correspond to statistics resulting from the simulation that must be read for an experiment design.
+	List<SimulationResponse*>* getResponses() const; //!< Returns a list of exits or simulation results that can be read externally. They usually correspond to statistics resulting from the simulation that must be read for an experiment design.
 
 public: // gets and sets
 	/*!
@@ -239,7 +245,10 @@ private:
 	void _showElements() const;
 	void _showSimulationControls() const;
 	void _showSimulationResponses() const;
-	void _createModelInternalElements();
+	void _destroyFutureEvents();
+	void _destroyTransientEntities();
+	void _destroyComponents();
+	void _destroyModelDataDefinitions();
 private:
 	bool _hasChanged = false;
     //bool _isChecked = false; // @TODO: Not implemented yet. First, _hasChanged should be trustful
@@ -261,7 +270,7 @@ private: // read only public access (gets)
 	//List<ModelComponent*>* _components;
 	List<Event*>* _futureEvents; //!< This is the calendar of future events, chronologically sorted, from where events are taken to be processed. This is one of the most important structures in Event driven simulation system
 	// for process analyser
-	List<SimulationControl*>* _responses;
+	List<SimulationResponse*>* _responses;
 	List<SimulationControl*>* _controls;
 
 private: // no public access (no gets / sets)
@@ -270,4 +279,3 @@ private: // no public access (no gets / sets)
 };
 //namespace\\}
 #endif /* SIMULATIONMODEL_H */
-

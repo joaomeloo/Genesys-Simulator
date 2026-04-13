@@ -5,7 +5,7 @@
 
 /* 
  * File:   Schedule.cpp
- * Author: rlcancian
+ * Author: Prof. Rafael Luiz Cancian, Dr. Eng.
  * 
  * Created on 14 de dezembro de 2022, 04:24
  */
@@ -13,6 +13,8 @@
 #include "Schedule.h"
 
 #include "../../kernel/simulator/Model.h"
+#include <cmath>
+#include <sstream>
 
 #ifdef PLUGINCONNECT_DYNAMIC
 
@@ -31,24 +33,54 @@ ModelDataDefinition* Schedule::NewInstance(Model* model, std::string name) {
 
 Schedule::Schedule(Model* model, std::string name) : ModelDataDefinition(model, Util::TypeOf<Schedule>(), name) {
 }
+
+Schedule::~Schedule() {
+	for (SchedulableItem* item : *_schedulableItems->list()) {
+		delete item;
+	}
+	delete _schedulableItems;
+}
 //
 //public
 //
 
 std::string Schedule::show() {
-	return ModelDataDefinition::show();
+	std::stringstream ss;
+	ss << ModelDataDefinition::show()
+	   << ",items=" << _schedulableItems->size()
+	   << ",repeatAfterLast=" << (_repeatAfterLast ? "true" : "false");
+	return ss.str();
 }
 
 std::string Schedule::getExpression() {
+	if (_schedulableItems->size() == 0) {
+		return "";
+	}
+
 	double tnow = _parentModel->getSimulation()->getSimulatedTime();
+	double cycleDuration = 0.0;
+	for (SchedulableItem* item : *_schedulableItems->list()) {
+		cycleDuration += item->getDuration();
+	}
+
+	double targetTime = tnow;
+	if (_repeatAfterLast) {
+		if (cycleDuration <= 0.0) {
+			return _schedulableItems->last()->getExpression();
+		}
+		targetTime = std::fmod(tnow, cycleDuration);
+		if (targetTime < 0.0) {
+			targetTime += cycleDuration;
+		}
+	}
+
 	double accumDuration = 0.0;
-	do
-		for (SchedulableItem* item : *_schedulableItems->list()) {
-			if (tnow <= accumDuration + item->getDuration()) {
-				return item->getExpression();
-			}
-			accumDuration += item->getDuration();
-		} while (_repeatAfterLast);
+	for (SchedulableItem* item : *_schedulableItems->list()) {
+		accumDuration += item->getDuration();
+		if (targetTime <= accumDuration) {
+			return item->getExpression();
+		}
+	}
 	return _schedulableItems->last()->getExpression();
 }
 
@@ -80,7 +112,7 @@ ModelDataDefinition* Schedule::LoadInstance(Model* model, PersistenceRecord *fie
 
 PluginInformation* Schedule::GetPluginInformation() {
 	PluginInformation* info = new PluginInformation(Util::TypeOf<Schedule>(), &Schedule::LoadInstance, &Schedule::NewInstance);
-	info->setDescriptionHelp("//@TODO");
+	info->setDescriptionHelp("Defines a repeating or finite list of expression-duration items that can be queried by simulated time.");
 	//info->setDescriptionHelp("");
 	//info->setObservation("");
 	//info->setMinimumOutputs();
@@ -98,8 +130,22 @@ bool Schedule::_loadInstance(PersistenceRecord *fields) {
 	bool res = ModelDataDefinition::_loadInstance(fields);
 	if (res) {
 		try {
-			//this->_someString = fields->loadField("someString", DEFAULT.someString);
-			//this->_someUint = fields->loadField("someUint", DEFAULT.someUint);
+			/*!
+			 * \brief Load schedulable items and repeat behavior.
+			 */
+			_repeatAfterLast = fields->loadField("repeatAfterLast", DEFAULT.repeatAfterLast);
+			unsigned int items = fields->loadField("items", 0u);
+			for (SchedulableItem* item : *_schedulableItems->list()) {
+				delete item;
+			}
+			_schedulableItems->clear();
+			for (unsigned int i = 0; i < items; i++) {
+				std::string suffix = Util::StrIndex(i);
+				std::string expression = fields->loadField("itemExpression" + suffix, "");
+				double duration = fields->loadField("itemDuration" + suffix, 0.0);
+				SchedulableItem::Rule rule = static_cast<SchedulableItem::Rule>(fields->loadField("itemRule" + suffix, static_cast<int>(SchedulableItem::Rule::IGNORE)));
+				_schedulableItems->insert(new SchedulableItem(expression, duration, rule));
+			}
 		} catch (...) {
 		}
 	}
@@ -108,8 +154,19 @@ bool Schedule::_loadInstance(PersistenceRecord *fields) {
 
 void Schedule::_saveInstance(PersistenceRecord *fields, bool saveDefaultValues) {
 	ModelDataDefinition::_saveInstance(fields, saveDefaultValues);
-	//fields->saveField("someUint", _someUint, DEFAULT.someUint);
-	//fields->saveField("someString", _someString, DEFAULT.someString);
+	/*!
+	 * \brief Persist schedule items and repeat behavior.
+	 */
+	fields->saveField("repeatAfterLast", _repeatAfterLast, DEFAULT.repeatAfterLast, saveDefaultValues);
+	fields->saveField("items", _schedulableItems->size(), 0u, saveDefaultValues);
+	unsigned int i = 0;
+	for (SchedulableItem* item : *_schedulableItems->list()) {
+		std::string suffix = Util::StrIndex(i);
+		fields->saveField("itemExpression" + suffix, item->getExpression(), "", saveDefaultValues);
+		fields->saveField("itemDuration" + suffix, item->getDuration(), 0.0, saveDefaultValues);
+		fields->saveField("itemRule" + suffix, static_cast<int>(item->getRule()), static_cast<int>(SchedulableItem::Rule::IGNORE), saveDefaultValues);
+		i++;
+	}
 }
 
 //
@@ -117,9 +174,29 @@ void Schedule::_saveInstance(PersistenceRecord *fields, bool saveDefaultValues) 
 //
 
 bool Schedule::_check(std::string& errorMessage) {
+	/*!
+	 * \brief Validate that schedule has items and non-negative durations.
+	 */
 	bool resultAll = true;
-	//resultAll &= _someString != "";
-	//resultAll &= _someUint > 0;
+	bool hasPositiveDuration = false;
+	if (_schedulableItems->size() == 0) {
+		errorMessage += "Schedule has no schedulable items. ";
+		resultAll = false;
+	}
+	for (SchedulableItem* item : *_schedulableItems->list()) {
+		if (item->getDuration() < 0.0) {
+			errorMessage += "Schedule item duration must be >= 0. ";
+			resultAll = false;
+		}
+		if (item->getDuration() > 0.0) {
+			hasPositiveDuration = true;
+		}
+		resultAll &= _parentModel->checkExpression(item->getExpression(), getName() + ".ItemExpression", errorMessage);
+	}
+	if (_repeatAfterLast && !hasPositiveDuration) {
+		errorMessage += "Schedule repeating cycle must contain at least one item with duration > 0. ";
+		resultAll = false;
+	}
 	return resultAll;
 }
 
@@ -129,26 +206,26 @@ void Schedule::_initBetweenReplications() {
 }
 
 void Schedule::_createInternalAndAttachedData() {
-	if (_reportStatistics) {
-		//if (_internal == nullptr) {
-		//	_internal = new StatisticsCollector(_parentModel, getName() + "." + "NumberInQueue", this); 
-		//	_internelElementsInsert("NumberInQueue", _internal);
-		//}
-	} else { //if (_cstatNumberInQueue != nullptr) {
-		this->_internalDataClear();
-	}
+	// Schedule currently has no internal or attached data to instantiate.
 }
 
 ParserChangesInformation* Schedule::_getParserChangesInformation() {
 	ParserChangesInformation* changes = new ParserChangesInformation();
-	//@TODO not implemented yet
+	/*!
+	 * \brief Return parser changes required by Schedule.
+	 *
+	 * No parser customization is currently necessary.
+	 */
 	//changes->getProductionToAdd()->insert(...);
 	//changes->getTokensToAdd()->insert(...);
 	return changes;
 }
 
-void Schedule::_addProperty(PropertyBase* property) {
-
+void Schedule::_addProperty(SimulationControl* property) {
+	/*!
+	 * \brief Keep local property mirror aligned with controls registered in model.
+	 */
+	_addSimulationControl(property);
 }
 
 //

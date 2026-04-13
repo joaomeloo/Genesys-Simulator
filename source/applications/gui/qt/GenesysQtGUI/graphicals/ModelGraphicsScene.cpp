@@ -34,11 +34,13 @@
 #include <QTreeWidget>
 #include <QMessageBox>
 #include <QUndoCommand>
+#include <memory>
 #include <string>
 #include <list>
 #include "graphicals/ModelGraphicsScene.h"
 #include "graphicals/ModelGraphicsView.h"
 #include "graphicals/GraphicalModelComponent.h"
+#include "graphicals/GraphicalModelDataDefinition.h"
 #include "graphicals/GraphicalComponentPort.h"
 #include "graphicals/GraphicalConnection.h"
 #include "graphicals/GraphicalDiagramConnection.h"
@@ -51,8 +53,51 @@
 #include "dialogs/DialogSelectVariable.h"
 #include "dialogs/DialogTimerConfigure.h"
 #include "animations/AnimationQueue.h"
+#include "services/GraphicalModelBuilder.h"
 #include <QCoreApplication>
 #include <QThread>
+#include <QPointer>
+#include <QTimer>
+#include <QDebug>
+#include <QSet>
+#include <QMetaObject>
+#include <algorithm>
+
+namespace {
+// Keep sync-in-progress state exception-safe inside queued synchronization execution.
+class ScopedSyncInProgress {
+public:
+    explicit ScopedSyncInProgress(bool* flag) : _flag(flag) {
+        if (_flag != nullptr) {
+            *_flag = true;
+        }
+    }
+    ~ScopedSyncInProgress() {
+        if (_flag != nullptr) {
+            *_flag = false;
+        }
+    }
+private:
+    bool* _flag = nullptr;
+};
+
+// Safely cast the scene parent to a generic graphics view.
+QGraphicsView* sceneParentGraphicsView(ModelGraphicsScene* scene) {
+    if (scene == nullptr) {
+        return nullptr;
+    }
+    return qobject_cast<QGraphicsView*>(scene->parent());
+}
+
+// Safely cast the scene parent to the specialized model graphics view.
+ModelGraphicsView* sceneParentModelGraphicsView(ModelGraphicsScene* scene) {
+    if (scene == nullptr) {
+        return nullptr;
+    }
+    // Use RTTI because ModelGraphicsView does not provide Qt meta-object casting.
+    return dynamic_cast<ModelGraphicsView*>(scene->parent());
+}
+}
 
 ModelGraphicsScene::ModelGraphicsScene(qreal x, qreal y, qreal width, qreal height, QObject *parent) : QGraphicsScene(x, y, width, height, parent) {
     // grid
@@ -73,20 +118,162 @@ ModelGraphicsScene::ModelGraphicsScene(qreal x, qreal y, qreal width, qreal heig
     _imagesAnimation->append("default.png");
 }
 
-ModelGraphicsScene::ModelGraphicsScene(const ModelGraphicsScene& orig) { // : QGraphicsScene(orig) {
-}
+ModelGraphicsScene::~ModelGraphicsScene() {
+    // Release transient drawing items that may still be detached from normal commit flow.
+    if (_currentRectangle != nullptr) {
+        if (_currentRectangle->scene() == this) {
+            removeItem(_currentRectangle);
+        }
+        delete _currentRectangle;
+        _currentRectangle = nullptr;
+    }
+    if (_currentLine != nullptr) {
+        if (_currentLine->scene() == this) {
+            removeItem(_currentLine);
+        }
+        delete _currentLine;
+        _currentLine = nullptr;
+    }
+    if (_currentEllipse != nullptr) {
+        if (_currentEllipse->scene() == this) {
+            removeItem(_currentEllipse);
+        }
+        delete _currentEllipse;
+        _currentEllipse = nullptr;
+    }
+    if (_currentPolygon != nullptr) {
+        if (_currentPolygon->scene() == this) {
+            removeItem(_currentPolygon);
+        }
+        delete _currentPolygon;
+        _currentPolygon = nullptr;
+    }
+    if (_currentCounter != nullptr) {
+        if (_currentCounter->scene() == this) {
+            removeItem(_currentCounter);
+        }
+        delete _currentCounter;
+        _currentCounter = nullptr;
+    }
+    if (_currentVariable != nullptr) {
+        if (_currentVariable->scene() == this) {
+            removeItem(_currentVariable);
+        }
+        delete _currentVariable;
+        _currentVariable = nullptr;
+    }
+    if (_currentTimer != nullptr) {
+        if (_currentTimer->scene() == this) {
+            removeItem(_currentTimer);
+        }
+        delete _currentTimer;
+        _currentTimer = nullptr;
+    }
 
-ModelGraphicsScene::~ModelGraphicsScene() {}
+    // Reuse the existing animation cleanup sequence before destroying animation containers.
+    clearAnimations();
+
+    // Clear and destroy grid line resources before releasing the grid container.
+    _grid.clear();
+    delete _grid.lines;
+    _grid.lines = nullptr;
+
+    // Reset lightweight auxiliary lists without forcing ownership deletion of scene-managed items.
+    if (_counters != nullptr) {
+        _counters->clear();
+    }
+    if (_variables != nullptr) {
+        _variables->clear();
+    }
+    if (_graphicalModelComponents != nullptr) {
+        _graphicalModelComponents->clear();
+    }
+    if (_graphicalModelDataDefinitions != nullptr) {
+        _graphicalModelDataDefinitions->clear();
+    }
+    if (_graphicalConnections != nullptr) {
+        _graphicalConnections->clear();
+    }
+    if (_graphicalDiagramConnections != nullptr) {
+        _graphicalDiagramConnections->clear();
+    }
+    if (_graphicalAssociations != nullptr) {
+        _graphicalAssociations->clear();
+    }
+    if (_graphicalGeometries != nullptr) {
+        _graphicalGeometries->clear();
+    }
+    if (_graphicalAnimations != nullptr) {
+        _graphicalAnimations->clear();
+    }
+    if (_graphicalEntities != nullptr) {
+        _graphicalEntities->clear();
+    }
+    if (_graphicalGroups != nullptr) {
+        _graphicalGroups->clear();
+    }
+
+    // Destroy heap-owning containers allocated by this scene and nullify their pointers.
+    delete _counters;
+    _counters = nullptr;
+    delete _variables;
+    _variables = nullptr;
+    delete _animationPaused;
+    _animationPaused = nullptr;
+    delete _imagesAnimation;
+    _imagesAnimation = nullptr;
+    delete _animationsTransition;
+    _animationsTransition = nullptr;
+    delete _animationsCounter;
+    _animationsCounter = nullptr;
+    delete _animationsVariable;
+    _animationsVariable = nullptr;
+    delete _animationsTimer;
+    _animationsTimer = nullptr;
+    delete _graphicalModelComponents;
+    _graphicalModelComponents = nullptr;
+    delete _graphicalModelDataDefinitions;
+    _graphicalModelDataDefinitions = nullptr;
+    delete _graphicalConnections;
+    _graphicalConnections = nullptr;
+    delete _graphicalDiagramConnections;
+    _graphicalDiagramConnections = nullptr;
+    delete _graphicalAssociations;
+    _graphicalAssociations = nullptr;
+    delete _graphicalGeometries;
+    _graphicalGeometries = nullptr;
+    delete _graphicalAnimations;
+    _graphicalAnimations = nullptr;
+    delete _graphicalEntities;
+    _graphicalEntities = nullptr;
+    delete _graphicalGroups;
+    _graphicalGroups = nullptr;
+}
 
 
 //-----------------------------------------------------------------------
 
+/**
+ * @brief Notifies view-level handlers about changes in graphical model.
+ *
+ * Event object is stack-allocated and forwarded by const-reference to avoid
+ * heap ownership ambiguity.
+ *
+ * @todo Consider broadcasting to all attached views when multi-view editing is supported.
+ */
 void ModelGraphicsScene::notifyGraphicalModelChange(GraphicalModelEvent::EventType eventType, GraphicalModelEvent::EventObjectType eventObjectType, QGraphicsItem *item) {
-    GraphicalModelEvent* modelGraphicsEvent = new GraphicalModelEvent(eventType, eventObjectType, item);
-    dynamic_cast<ModelGraphicsView*> (views().at(0))->notifySceneGraphicalModelEventHandler(modelGraphicsEvent);
+    if (views().isEmpty()) {
+        return;
+    }
+    ModelGraphicsView* view = dynamic_cast<ModelGraphicsView*> (views().at(0));
+    if (view == nullptr) {
+        return;
+    }
+    GraphicalModelEvent modelGraphicsEvent(eventType, eventObjectType, item);
+    view->notifySceneGraphicalModelEventHandler(modelGraphicsEvent);
 }
 
-GraphicalModelComponent* ModelGraphicsScene::addGraphicalModelComponent(Plugin* plugin, ModelComponent* component, QPointF position, QColor color, bool notify) {
+GraphicalModelComponent* ModelGraphicsScene::addGraphicalModelComponent(Plugin* plugin, ModelComponent* component, QPointF position, QColor color, bool notify, GraphicalModelComponent* autoConnectSource) {
     _propertyEditor->addElement(component);
     for (auto prop : *component->getProperties()->list()) {
         if (prop->getIsList()) {
@@ -105,60 +292,6 @@ GraphicalModelComponent* ModelGraphicsScene::addGraphicalModelComponent(Plugin* 
     // cria o componente gráfico
     GraphicalModelComponent* graphComp = new GraphicalModelComponent(plugin, component, position, color);
 
-    // cria as conexoes
-    // verifica se tenho um componente selecionado
-    if (selectedItems().size() == 1 && plugin->getPluginInfo()->getMinimumInputs() > 0) { // check if there is selected component and crate a connection between them
-        GraphicalModelComponent* otherGraphComp = dynamic_cast<GraphicalModelComponent*> (selectedItems().at(0));
-
-        // verifica se conseguiu converter o item selecionado para GraphicalModelComponent
-        if (otherGraphComp != nullptr) { // a component is selected
-            // pega o componente selecionado
-            ModelComponent* otherComp = otherGraphComp->getComponent();
-
-            // numero maximo de possiveis conexoes pela porta de saida
-            unsigned int maxOutputsOtherComp = otherGraphComp->getGraphicalOutputPorts().size();
-
-            // verifica se ainda posso criar conexoes com aquele componente
-            if (otherGraphComp->getComponent()->getConnectionManager()->connections()->size() < maxOutputsOtherComp) {
-                // caso tenha portas disponíveis, busca qual delas é
-                for (unsigned int numPort = 0; numPort < maxOutputsOtherComp; numPort++) {
-                    // caso seja um ponteiro vazio, ele esta livre
-                    if (otherComp->getConnectionManager()->getConnectionAtPort(numPort) == nullptr) {
-                        // create connection (both model and grapically, since model is being built
-                        // model
-                        otherGraphComp->getComponent()->getConnectionManager()->insertAtPort(numPort, new Connection({component, 0}));
-
-                        //graphically
-                        GraphicalComponentPort* srcport = ((GraphicalModelComponent*) selectedItems().at(0))->getGraphicalOutputPorts().at(numPort);
-                        GraphicalComponentPort* destport = graphComp->getGraphicalInputPorts().at(0);
-                        addGraphicalConnection(srcport, destport, numPort, 0);
-
-                        otherGraphComp->setOcupiedOutputPorts(otherGraphComp->getOcupiedOutputPorts() + 1);
-                        graphComp->setOcupiedInputPorts(graphComp->getOcupiedInputPorts() + 1);
-                        break;
-                    }
-                }
-            }
-        // caso seja uma porta que esteja selecionada
-        } else {
-            GraphicalComponentPort* sourceGraphPort = dynamic_cast<GraphicalComponentPort*> (selectedItems().at(0));
-            if (sourceGraphPort != nullptr) { // a specific output port of a component is selected.
-                if (sourceGraphPort->getConnections()->size() == 0) {
-                    // create connection (both model and grapically, since model is being built (ALMOST REPEATED CODE -- REFACTOR)
-                    otherGraphComp = sourceGraphPort->graphicalComponent();
-                    // create connection (both model and grapically, since model is being built (ALMOST REPEATED CODE -- REFACTOR)
-                    // model
-                    otherGraphComp->getComponent()->getConnectionManager()->insertAtPort(sourceGraphPort->portNum(), new Connection({component, 0}));
-                    //graphically
-                    GraphicalComponentPort* destport = graphComp->getGraphicalInputPorts().at(0);
-                    addGraphicalConnection(sourceGraphPort, destport, sourceGraphPort->portNum(), 0);
-
-                    otherGraphComp->setOcupiedOutputPorts(otherGraphComp->getOcupiedOutputPorts() + 1);
-                    graphComp->setOcupiedInputPorts(graphComp->getOcupiedInputPorts() + 1);
-                }
-            }
-        }
-    }
     // adiciona na lista de componentes do modelo;
     _graphicalModelComponents->append(graphComp);
 
@@ -184,6 +317,16 @@ GraphicalModelComponent* ModelGraphicsScene::addGraphicalModelComponent(Plugin* 
         GraphicalModelEvent::EventObjectType eventObjectType = GraphicalModelEvent::EventObjectType::COMPONENT;
 
         notifyGraphicalModelChange(eventType, eventObjectType, graphComp);
+    }
+
+    if (autoConnectSource != nullptr && plugin->getPluginInfo()->getMinimumInputs() > 0) {
+        GraphicalComponentPort* sourcePort = firstAvailableOutputPort(autoConnectSource);
+        GraphicalComponentPort* destinationPort = firstInputPort(graphComp);
+        qInfo() << "Drop auto-connect source=" << autoConnectSource->getComponent()->getId()
+                << QString::fromStdString(autoConnectSource->getComponent()->getName())
+                << "dest=" << graphComp->getComponent()->getId()
+                << QString::fromStdString(graphComp->getComponent()->getName());
+        tryCreateConnection(sourcePort, destinationPort, true);
     }
 
     return graphComp;
@@ -220,7 +363,17 @@ GraphicalModelDataDefinition* ModelGraphicsScene::addGraphicalModelDataDefinitio
     getAllDataDefinitions()->append(graphDataDef);
     getGraphicalModelDataDefinitions()->append(graphDataDef);
 
-    addItem(graphDataDef);
+    // Avoid duplicate addItem and avoid cross-scene item ownership conflicts.
+    if (graphDataDef != nullptr) {
+        if (graphDataDef->scene() == this) {
+            // Item is already owned by this scene.
+        } else if (graphDataDef->scene() != nullptr) {
+            graphDataDef->scene()->removeItem(graphDataDef);
+            addItem(graphDataDef);
+        } else {
+            addItem(graphDataDef);
+        }
+    }
 
     return graphDataDef;
 }
@@ -232,7 +385,17 @@ GraphicalDiagramConnection* ModelGraphicsScene::addGraphicalDiagramConnection(QG
     getAllGraphicalDiagramsConnections()->append(connection);
     getGraphicalDiagramsConnections()->append(connection);
 
-    addItem(connection);
+    // Avoid duplicate addItem and avoid cross-scene item ownership conflicts.
+    if (connection != nullptr) {
+        if (connection->scene() == this) {
+            // Item is already owned by this scene.
+        } else if (connection->scene() != nullptr) {
+            connection->scene()->removeItem(connection);
+            addItem(connection);
+        } else {
+            addItem(connection);
+        }
+    }
 
     return connection;
 }
@@ -361,12 +524,13 @@ void ModelGraphicsScene::startTextEditing() {
 
 // limpa todo o modelo
 void ModelGraphicsScene::clearGraphicalModelComponents() {
-    QList<GraphicalModelComponent*> *componentsInModel = this->graphicalModelComponentItems();
+    // Get model components by value to avoid temporary heap ownership.
+    QList<GraphicalModelComponent*> componentsInModel = this->graphicalModelComponentItems();
     GraphicalModelComponent *source;
     GraphicalModelComponent *destination;
 
-    for (unsigned int x = 0; x < (unsigned int) componentsInModel->size(); x++){
-        GraphicalModelComponent *gmc = componentsInModel->at(x);
+    for (unsigned int x = 0; x < (unsigned int) componentsInModel.size(); x++){
+        GraphicalModelComponent *gmc = componentsInModel.at(x);
         removeComponentInModel(gmc);
     }
 
@@ -497,10 +661,69 @@ void ModelGraphicsScene::insertComponent(GraphicalModelComponent* gmc, QList<Gra
 }
 
 void ModelGraphicsScene::removeGraphicalModelDataDefinition(GraphicalModelDataDefinition* gmdd) {
+    if (gmdd == nullptr) {
+        return;
+    }
+    if (dynamic_cast<GraphicalModelComponent*>(gmdd) != nullptr) {
+        qInfo() << "removeGraphicalModelDataDefinition: refusing to remove GraphicalModelComponent as data definition";
+        return;
+    }
+
+    // Remove only data-definition items that are still alive in the scene snapshot.
+    const QList<QGraphicsItem*> liveItems = items();
+    if (!liveItems.contains(gmdd)) {
+        getGraphicalModelDataDefinitions()->removeOne(gmdd);
+        getAllDataDefinitions()->removeOne(gmdd);
+        return;
+    }
+
+    // Remove all diagram links that still reference this data definition before removing the item itself.
+    QList<GraphicalDiagramConnection*> relatedConnections;
+    for (GraphicalDiagramConnection* connection : *getAllGraphicalDiagramsConnections()) {
+        if (connection == nullptr) {
+            continue;
+        }
+        if (connection->getDataDefinition() == gmdd || connection->getLinkedDataDefinition() == gmdd) {
+            relatedConnections.append(connection);
+        }
+    }
+    for (GraphicalDiagramConnection* connection : relatedConnections) {
+        removeGraphicalDiagramConnection(connection);
+    }
+
+    if (QGraphicsItemGroup* group = gmdd->group()) {
+        group->removeFromGroup(gmdd);
+        const QList<QGraphicsItem*> groupedChildren = group->childItems();
+        const bool hasSingleOrNoChild = groupedChildren.size() <= 1;
+        bool hasKnownGroupedComponents = false;
+        if (_listComponentsGroup.contains(group)) {
+            hasKnownGroupedComponents = !_listComponentsGroup.value(group).isEmpty();
+        }
+        if (hasSingleOrNoChild && !hasKnownGroupedComponents) {
+            for (QGraphicsItem* child : groupedChildren) {
+                if (child == nullptr) {
+                    continue;
+                }
+                group->removeFromGroup(child);
+                if (child->scene() != this) {
+                    addItem(child);
+                }
+            }
+            _listComponentsGroup.remove(group);
+            _oldPositionsItems.remove(group);
+            _graphicalGroups->removeOne(group);
+            removeItem(group);
+            delete group;
+        }
+    }
+
     //graphically
     removeItem(gmdd);
-    getGraphicalModelComponents()->removeOne(gmdd);
+    // Keep data-definition ownership lists consistent during removal.
+    getGraphicalModelDataDefinitions()->removeOne(gmdd);
     getAllDataDefinitions()->removeOne(gmdd);
+    _allGraphicalModelDataDefinitions.removeOne(gmdd);
+    _oldPositionsItems.remove(gmdd);
     delete(gmdd);
 }
 
@@ -510,6 +733,155 @@ void ModelGraphicsScene::removeGraphicalDiagramConnection(GraphicalDiagramConnec
     getGraphicalDiagramsConnections()->removeOne(connection);
     getAllGraphicalDiagramsConnections()->removeOne(connection);
     delete(connection);
+}
+
+// Clear only graphical data-definition nodes without touching normal components/connections.
+void ModelGraphicsScene::clearGraphicalModelDataDefinitions() {
+    QList<GraphicalModelDataDefinition*>* gmdds = getAllDataDefinitions();
+    while (!gmdds->isEmpty()) {
+        GraphicalModelDataDefinition* gmdd = gmdds->first();
+        removeGraphicalModelDataDefinition(gmdd);
+    }
+}
+
+// Clear only diagram arrows that link data-definition artifacts.
+void ModelGraphicsScene::clearGraphicalDiagramConnections() {
+    QList<GraphicalDiagramConnection*>* connections = getAllGraphicalDiagramsConnections();
+    while (!connections->isEmpty()) {
+        GraphicalDiagramConnection* connection = connections->first();
+        removeGraphicalDiagramConnection(connection);
+    }
+}
+
+void ModelGraphicsScene::sanitizeGraphicalDataDefinitionsBookkeeping() {
+    // Rebuild live data-definition/diagram sets from scene-owned items before differential synchronization.
+    const QList<QGraphicsItem*> liveItems = items();
+    QSet<GraphicalModelDataDefinition*> liveDataDefinitions;
+    QSet<GraphicalDiagramConnection*> liveDiagramConnections;
+
+    for (QGraphicsItem* item : liveItems) {
+        if (dynamic_cast<GraphicalModelComponent*>(item) != nullptr) {
+            qInfo() << "sanitizeGraphicalDataDefinitionsBookkeeping: ignoring GraphicalModelComponent item";
+            continue;
+        }
+        if (auto* gmdd = dynamic_cast<GraphicalModelDataDefinition*>(item)) {
+            liveDataDefinitions.insert(gmdd);
+            continue;
+        }
+        if (auto* connection = dynamic_cast<GraphicalDiagramConnection*>(item)) {
+            liveDiagramConnections.insert(connection);
+        }
+    }
+
+    // Drop stale pointers from helper lists to prevent dangling addresses from being used as source of truth.
+    for (auto it = _allGraphicalModelDataDefinitions.begin(); it != _allGraphicalModelDataDefinitions.end();) {
+        if (!liveDataDefinitions.contains(*it)) {
+            it = _allGraphicalModelDataDefinitions.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = _allGraphicalDiagramConnections.begin(); it != _allGraphicalDiagramConnections.end();) {
+        if (!liveDiagramConnections.contains(*it)) {
+            it = _allGraphicalDiagramConnections.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    QList<QGraphicsItem*>* graphicalDataDefinitions = getGraphicalModelDataDefinitions();
+    for (auto it = graphicalDataDefinitions->begin(); it != graphicalDataDefinitions->end();) {
+        auto* gmdd = dynamic_cast<GraphicalModelDataDefinition*>(*it);
+        if (gmdd == nullptr || !liveDataDefinitions.contains(gmdd)) {
+            it = graphicalDataDefinitions->erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    QList<QGraphicsItem*>* graphicalDiagramConnections = getGraphicalDiagramsConnections();
+    for (auto it = graphicalDiagramConnections->begin(); it != graphicalDiagramConnections->end();) {
+        auto* connection = dynamic_cast<GraphicalDiagramConnection*>(*it);
+        if (connection == nullptr || !liveDiagramConnections.contains(connection)) {
+            it = graphicalDiagramConnections->erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// Keep legacy diagram visibility checks coherent when data definitions are rebuilt by the builder.
+void ModelGraphicsScene::setDiagramLayerState(bool diagramCreated, bool visible) {
+    _diagram = diagramCreated;
+    _visibleDiagram = visible;
+}
+
+QList<QGraphicsItem*> ModelGraphicsScene::userDeletableItems(const QList<QGraphicsItem*>& items) const {
+    return userOperableItems(items);
+}
+
+QList<QGraphicsItem*> ModelGraphicsScene::userOperableItems(const QList<QGraphicsItem*>& items) const {
+    QList<QGraphicsItem*> filtered;
+    // Keep internal infrastructure selectable when needed by logic, but not operable by edit actions.
+    for (QGraphicsItem* item : items) {
+        if (item == nullptr) {
+            continue;
+        }
+        if (dynamic_cast<GraphicalComponentPort*>(item) != nullptr) {
+            continue;
+        }
+        if (dynamic_cast<GraphicalDiagramConnection*>(item) != nullptr) {
+            continue;
+        }
+        const bool isDataDefinition = dynamic_cast<GraphicalModelDataDefinition*>(item) != nullptr;
+        const bool isComponent = dynamic_cast<GraphicalModelComponent*>(item) != nullptr;
+        if (isDataDefinition && !isComponent) {
+            continue;
+        }
+        filtered.append(item);
+    }
+    return filtered;
+}
+
+void ModelGraphicsScene::ensureInitialInternalDataDefinitionGrouping(GraphicalModelDataDefinition* dataDefinition, GraphicalModelComponent* component) {
+    // Only auto-group on first materialization when there is no persisted GUI state restoration in progress.
+    if (_persistedGuiRestoreInProgress || dataDefinition == nullptr || component == nullptr || dataDefinition->group() != nullptr) {
+        return;
+    }
+
+    QGraphicsItemGroup* targetGroup = component->group();
+    if (targetGroup == nullptr) {
+        targetGroup = new QGraphicsItemGroup();
+        targetGroup->setHandlesChildEvents(false);
+        targetGroup->setFlag(QGraphicsItem::ItemIsSelectable, true);
+        targetGroup->setFlag(QGraphicsItem::ItemIsMovable, true);
+        addItem(targetGroup);
+        _graphicalGroups->append(targetGroup);
+        insertOldPositionItem(targetGroup, targetGroup->pos());
+    }
+
+    if (component->group() == nullptr) {
+        targetGroup->addToGroup(component);
+        insertOldPositionItem(component, component->pos());
+    }
+    targetGroup->addToGroup(dataDefinition);
+    insertOldPositionItem(dataDefinition, dataDefinition->pos());
+
+    if (!_listComponentsGroup.contains(targetGroup)) {
+        _listComponentsGroup.insert(targetGroup, QList<GraphicalModelComponent*>());
+    }
+    QList<GraphicalModelComponent*>& groupedComponents = _listComponentsGroup[targetGroup];
+    if (!groupedComponents.contains(component)) {
+        groupedComponents.append(component);
+    }
+}
+
+void ModelGraphicsScene::setPersistedGuiRestoreInProgress(bool restoring) {
+    _persistedGuiRestoreInProgress = restoring;
+}
+
+bool ModelGraphicsScene::isPersistedGuiRestoreInProgress() const {
+    return _persistedGuiRestoreInProgress;
 }
 
 // trata da remocao das conexoes de um componente
@@ -705,7 +1077,7 @@ bool ModelGraphicsScene::connectDestination(GraphicalConnection* connection, Gra
         }
 
         // diz que o componente de destino tem mais uma porta de saida ocupada
-        dst->setOcupiedInputPorts(dst->getOcupiedOutputPorts() + 1);
+        dst->setOcupiedInputPorts(dst->getOcupiedInputPorts() + 1);
 
         return true;
     }
@@ -736,9 +1108,10 @@ void ModelGraphicsScene::redoConnections(GraphicalModelComponent *graphicalCompo
 
 
 void ModelGraphicsScene::saveDataDefinitions() {
-    QList<GraphicalModelComponent*> *components = this->graphicalModelComponentItems();
+    // Get model components by value to avoid temporary heap ownership.
+    QList<GraphicalModelComponent*> components = this->graphicalModelComponentItems();
 
-    for (GraphicalModelComponent* component : *components) {
+    for (GraphicalModelComponent* component : components) {
         component->verifyQueue();
 
         if (component->getInternalData()->empty() || component->getAttachedData()->empty()) {
@@ -773,12 +1146,13 @@ void ModelGraphicsScene::saveDataDefinitions() {
 }
 
 void ModelGraphicsScene::insertRestoredDataDefinitions(bool loaded) {
-    QList<GraphicalModelComponent*> *components = this->graphicalModelComponentItems();
+    // Get model components by value to avoid temporary heap ownership.
+    QList<GraphicalModelComponent*> components = this->graphicalModelComponentItems();
     QList<GraphicalModelComponent*> *allComponentes = this->getAllComponents();
 
     if (!allComponentes->empty()) {
         for (GraphicalModelComponent* component : *allComponentes) {
-            if (!components->contains(component)) {
+            if (!components.contains(component)) {
                 if (component->getEntityType() == nullptr) {
                     SourceModelComponent *isSrc = dynamic_cast<SourceModelComponent *>(component->getComponent());
 
@@ -792,8 +1166,8 @@ void ModelGraphicsScene::insertRestoredDataDefinitions(bool loaded) {
         }
     }
 
-    if (!components->empty()) {
-        for (GraphicalModelComponent* component : *components) {
+    if (!components.empty()) {
+        for (GraphicalModelComponent* component : components) {
             for (ModelDataDefinition* dataInternal : *component->getInternalData()) {
                 _simulator->getModelManager()->current()->getDataManager()->insert(dataInternal);
             }
@@ -825,7 +1199,7 @@ void ModelGraphicsScene::addDrawing(QGraphicsItem * item, bool notify) {
     isAnimation = addDrawingAnimation(item);
 
     if (!isAnimation)
-        isGeometry = removeDrawingGeometry(item);
+        isGeometry = addDrawingGeometry(item);
 
     if (isAnimation || isGeometry) {
         addItem(item);
@@ -960,26 +1334,51 @@ void ModelGraphicsScene::showGrid()
     _grid.visible = !_grid.visible;
 }
 
+// Ajusta visibilidade do grid sem depender da semântica de toggle de showGrid().
+void ModelGraphicsScene::setGridVisible(bool visible) {
+    if (_grid.visible != visible) {
+        showGrid();
+    } else if (_grid.visible && _grid.lines->empty()) {
+        showGrid();
+        showGrid();
+    }
+}
+
+// Retorna o estado visual corrente do grid para persistência/restauração.
+bool ModelGraphicsScene::isGridVisible() const {
+    return _grid.visible;
+}
+
 void ModelGraphicsScene::createDiagrams()
 {
+    // Prevents duplicate diagram nodes and edges when diagram creation is requested more than once.
+    if (_diagram) {
+        return;
+    }
+
     Model * m = _simulator->getModelManager()->current();
     ModelDataManager* dataManager = m->getDataManager();
 
     QColor purple(128,0,128);
     QColor grey(220,220,220);
     //creating graphicalModelDataDefinitions
-    for (std::string dataTypename : *m->getDataManager()->getDataDefinitionClassnames()) {
+    // Iterate over a value snapshot of data-definition class names when creating diagram nodes.
+    for (std::string dataTypename : m->getDataManager()->getDataDefinitionClassnames()) {
         std::list<ModelDataDefinition*>* listDataDefinitions = dataManager->getDataDefinitionList(dataTypename)->list();
 
         for (auto it = listDataDefinitions->begin(); it != listDataDefinitions->end(); ++it) {
             ModelDataDefinition* datadef = *it;
-            std::string pluginName = datadef->getName();
+            std::string pluginName = datadef->getClassname();
             Plugin* plugin = _simulator->getPluginManager()->find(pluginName);
+            if (plugin == nullptr) {
+                continue;
+            }
             addGraphicalModelDataDefinition(plugin, datadef, QPointF(0, 0), grey);
         }
     }
     //organizing diagram
-    QList<GraphicalModelDataDefinition*>* datadef_visited = new QList<GraphicalModelDataDefinition*>();
+    // Track visited data-definition nodes in automatic storage to avoid temporary heap allocations.
+    QList<GraphicalModelDataDefinition*> datadef_visited;
     QList<GraphicalModelComponent*>* gmcs = getAllComponents();
     //internal and attached data of the modelComponents
     for (int i = 0; i < gmcs->size(); i++) {
@@ -1002,7 +1401,7 @@ void ModelGraphicsScene::createDiagrams()
                 std::string name = gdd->getDataDefinition()->getName();
                 if (name == dataDefinition->getName()) {
                     if (getGraphicalModelComponents()->contains(gmc)) {
-                        if (datadef_visited->contains(gdd)) {
+                        if (datadef_visited.contains(gdd)) {
                             qreal x = (gdd->x() + component_pos.x()) / 2;
                             gdd->setPos(x, y_attached -150);
                             gdd->setOldPosition(x, y_attached -150);
@@ -1015,7 +1414,7 @@ void ModelGraphicsScene::createDiagrams()
 
                         } else {
 
-                            datadef_visited->append(gdd);
+                            datadef_visited.append(gdd);
                             y_attached = y_attached - 150;
 
                             gdd->setPos(component_pos.x(), y_attached);
@@ -1042,7 +1441,7 @@ void ModelGraphicsScene::createDiagrams()
                 GraphicalModelDataDefinition* gdd = graphicalDataDefinitions->at(j);
                 std::string name = gdd->getDataDefinition()->getName();
                 if (name == dataDefinition->getName()) {
-                    datadef_visited->append(gdd);
+                    datadef_visited.append(gdd);
                     y_internal = y_internal + 150;
 
                     gdd->setPos(component_pos.x(), y_internal);
@@ -1056,8 +1455,9 @@ void ModelGraphicsScene::createDiagrams()
         }
     }
     //internalData of the DataDefinitions
-    for (int i = 0; i < datadef_visited->size(); i++) {
-        GraphicalModelDataDefinition* parentDataDefinition = datadef_visited->at(i);
+    // Reuse the visited-node list while wiring internal links among data-definition diagram nodes.
+    for (int i = 0; i < datadef_visited.size(); i++) {
+        GraphicalModelDataDefinition* parentDataDefinition = datadef_visited.at(i);
         std::map<std::string, ModelDataDefinition*>* internalData = parentDataDefinition->getDataDefinition()->getInternalData();
 
         QPointF dataDefinition_pos = parentDataDefinition->getOldPosition();
@@ -1071,7 +1471,7 @@ void ModelGraphicsScene::createDiagrams()
                 GraphicalModelDataDefinition* gdd = graphicalDataDefinitions->at(j);
                 std::string name = gdd->getDataDefinition()->getName();
                 if (name == dataDefinition->getName()) {
-                    datadef_visited->append(gdd);
+                    datadef_visited.append(gdd);
                     x = x - 200;
 
                     gdd->setPos(x, dataDefinition_pos.y());
@@ -1086,25 +1486,18 @@ void ModelGraphicsScene::createDiagrams()
     }
     _diagram = true;
     actualizeDiagramArrows();
-    delete datadef_visited;
 }
 
 void ModelGraphicsScene::actualizeDiagramArrows() {
 
     if (existDiagram()) {
         QList<GraphicalDiagramConnection*>* connections = getAllGraphicalDiagramsConnections();
-        int size_connections = connections->size();
-        for (int i = 0; i < size_connections; i++) {
-
-            GraphicalDiagramConnection* itemConnection = connections->first();
-
-            QGraphicsItem * item_1 = itemConnection->getDataDefinition();
-            QGraphicsItem * item_2 = itemConnection->getLinkedDataDefinition();
-            addGraphicalDiagramConnection(item_1, item_2, itemConnection->getConnectionType());
-
-            removeGraphicalDiagramConnection(itemConnection);
+        for (GraphicalDiagramConnection* itemConnection : *connections) {
+            if (itemConnection == nullptr) {
+                continue;
+            }
+            itemConnection->refreshGeometry();
         }
-        if (!visibleDiagram()) hideDiagrams();
     }
 }
 
@@ -1117,31 +1510,12 @@ bool ModelGraphicsScene::visibleDiagram() {
 }
 
 void ModelGraphicsScene::destroyDiagram() {
-    QList<GraphicalModelDataDefinition*>* gmdds = getAllDataDefinitions();
-    int size_gmdds = gmdds->size();
-    for (int i = 0; i < size_gmdds; i++) {
-        GraphicalModelDataDefinition* gmdd = gmdds->first();
-        removeGraphicalModelDataDefinition(gmdd);
-    }
-
-    QList<GraphicalDiagramConnection*>* connections = getAllGraphicalDiagramsConnections();
-    int size_connections = connections->size();
-    for (int i = 0; i < size_connections; i++) {
-        GraphicalDiagramConnection* itemConnection = connections->first();
-        removeGraphicalDiagramConnection(itemConnection);
-    }
-
-    _diagram = false;
+    clearGraphicalModelDataDefinitions();
+    clearGraphicalDiagramConnections();
+    setDiagramLayerState(false, false);
 }
 
 void ModelGraphicsScene::hideDiagrams() {
-    QList<GraphicalModelDataDefinition*>* dataDefinitions = getAllDataDefinitions();
-    for (int i = 0; i < dataDefinitions->size(); i++) {
-        dataDefinitions->at(i)->hide();
-        dataDefinitions->at(i)->setFlag(QGraphicsItem::ItemIsSelectable, false);
-        dataDefinitions->at(i)->setFlag(QGraphicsItem::ItemIsMovable, false);
-    }
-
     QList<GraphicalDiagramConnection*>* connections = getAllGraphicalDiagramsConnections();
     for (int i = 0; i < connections->size(); i++) {
         connections->at(i)->hide();
@@ -1153,7 +1527,6 @@ void ModelGraphicsScene::showDiagrams() {
     QList<GraphicalModelDataDefinition*>* dataDefinitions = getAllDataDefinitions();
     if (dataDefinitions->size() > 0) {
         for (int i = 0; i < dataDefinitions->size(); i++) {
-
             dataDefinitions->at(i)->show();
             dataDefinitions->at(i)->setFlag(QGraphicsItem::ItemIsSelectable, true);
             dataDefinitions->at(i)->setFlag(QGraphicsItem::ItemIsMovable, true);
@@ -1178,49 +1551,266 @@ bool ModelGraphicsScene::getSnapToGrid() {
 }
 
 void ModelGraphicsScene::animateTransition(ModelComponent *source, ModelComponent *destination, bool viewSimulation, Event *event) {
+    // Log transition creation request with event/endpoint correlation context.
+    qInfo() << "GUI ModelGraphicsScene animateTransition sourceId="
+            << (source ? source->getId() : 0)
+            << "destinationId=" << (destination ? destination->getId() : 0)
+            << "viewSimulation=" << viewSimulation
+            << "eventPtr=" << event;
+    // Skip transition creation when source or destination is missing.
+    if (source == nullptr || destination == nullptr) {
+        // Log explicit rejection reason when transition endpoints are unavailable.
+        qInfo() << "GUI ModelGraphicsScene animateTransition rejected reason=missingEndpoint"
+                << "eventPtr=" << event
+                << "sourceId=" << (source ? source->getId() : 0)
+                << "destinationId=" << (destination ? destination->getId() : 0);
+        return;
+    }
+
     // Cria a animação
     AnimationTransition *animationTransition = new AnimationTransition(this, source, destination, viewSimulation);
 
-    if (animationTransition->getGraphicalStartComponent() != nullptr && animationTransition->getGraphicalEndComponent() != nullptr && viewSimulation) {
+    // Log newly created transition pointer so downstream logs can be correlated.
+    qInfo() << "GUI ModelGraphicsScene animateTransition created transitionPtr=" << animationTransition
+            << "eventPtr=" << event
+            << "sourceId=" << (source ? source->getId() : 0)
+            << "destinationId=" << (destination ? destination->getId() : 0);
+
+    // Forward transition to local loop only when GUI endpoints and animation runtime are valid.
+    if (animationTransition->getGraphicalStartComponent() != nullptr
+            && animationTransition->getGraphicalEndComponent() != nullptr
+            && animationTransition->isReadyToRun()
+            && viewSimulation) {
         runAnimateTransition(animationTransition, event);
     } else {
+        // Log explicit rejection reason when transition cannot be scheduled for execution.
+        qInfo() << "GUI ModelGraphicsScene animateTransition rejected reason=invalidTransitionOrViewDisabled"
+                << "transitionPtr=" << animationTransition
+                << "eventPtr=" << event
+                << "sourceId=" << (source ? source->getId() : 0)
+                << "destinationId=" << (destination ? destination->getId() : 0)
+                << "hasStart=" << (animationTransition->getGraphicalStartComponent() != nullptr)
+                << "hasEnd=" << (animationTransition->getGraphicalEndComponent() != nullptr)
+                << "ready=" << animationTransition->isReadyToRun()
+                << "viewSimulation=" << viewSimulation;
+        // Ensure invalid/non-visible transition is fully cleaned up to avoid leaks.
         animationTransition->stopAnimation();
+        delete animationTransition;
+        return;
     }
 }
 
 void ModelGraphicsScene::runAnimateTransition(AnimationTransition *animationTransition, Event *event, bool restart) {
+    // Log only the raw transition address to avoid QDebug QObject* dereference paths.
+    const void* initialTransitionAddress = static_cast<const void*>(animationTransition);
+    // Log transition runner entry with correlation keys before runtime checks.
+    qInfo() << "GUI ModelGraphicsScene runAnimateTransition begin restart=" << restart
+            << "eventPtr=" << event
+            << "transitionPtr=" << initialTransitionAddress;
+    // Exit before local event loop when transition pointer is invalid or not runnable.
+    if (animationTransition == nullptr || !animationTransition->isReadyToRun()) {
+        // Log rejection details when transition is null or not ready to run.
+        qInfo() << "GUI ModelGraphicsScene runAnimateTransition rejected transitionNull="
+                << (animationTransition == nullptr)
+                << "transitionPtr=" << initialTransitionAddress
+                << "eventPtr=" << event
+                << "restart=" << restart
+                << "ready=" << (animationTransition ? animationTransition->isReadyToRun() : false);
+        if (animationTransition != nullptr) {
+            animationTransition->stopAnimation();
+            delete animationTransition;
+        }
+        return;
+    }
+
+    // Track transition lifetime across nested event loop execution.
+    QPointer<AnimationTransition> guardedTransition(animationTransition);
+
     _animationsTransition->append(animationTransition);
 
-    // Inicia ou reinicia a animação
+    // Create the local event loop before starting the animation to avoid missing early signals.
+    QEventLoop loop;
+
+    // Use a local single-shot timer as a fail-safe to guarantee loop termination.
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+
+    // Track when the local loop exits due to timeout instead of animation signals.
+    bool exitedByTimeout = false;
+
+    // Store temporary finished connection to disconnect it after this loop execution.
+    QMetaObject::Connection finishedConnection = connect(animationTransition, &AnimationTransition::finished, &loop, &QEventLoop::quit);
+
+    // Ensure the local loop exits if the transition is destroyed during execution.
+    QMetaObject::Connection destroyedConnection = connect(animationTransition, &QObject::destroyed, &loop, &QEventLoop::quit);
+
+    // Quit the local loop and mark timeout when the fail-safe timer expires.
+    QMetaObject::Connection timeoutConnection = connect(&timeoutTimer, &QTimer::timeout, [&loop, &exitedByTimeout]() {
+        exitedByTimeout = true;
+        loop.quit();
+    });
+
+    // Connect state changes before start/restart so pause transitions are observed from the beginning.
+    QMetaObject::Connection stateChangedConnection = connect(animationTransition, &QAbstractAnimation::stateChanged, [this, &loop, event, animationTransition](QAbstractAnimation::State newState, QAbstractAnimation::State oldState) {
+        handleAnimationStateChanged(newState, &loop, event, animationTransition);
+    });
+
+    // Start or restart only after wiring temporary loop exit connections.
     if (restart)
         animationTransition->restartAnimation();
     else
         animationTransition->startAnimation();
+    // Capture a stable raw address for logs while the local loop is running.
+    const void* runningTransitionAddress = static_cast<const void*>(animationTransition);
+    // Log runtime execution parameters right after start/restart dispatch.
+    qInfo() << "GUI ModelGraphicsScene runAnimateTransition runtime ready="
+            << "transitionPtr=" << runningTransitionAddress
+            << "eventPtr=" << event
+            << "restart=" << restart
+            << animationTransition->isReadyToRun()
+            << "durationMs=" << animationTransition->duration();
 
-    // Cria um loop de eventos para aguardar a conclusão da animação
-    QEventLoop loop;
-    connect(animationTransition, &AnimationTransition::finished, &loop, &QEventLoop::quit);
+    // Start the fail-safe timer with an additional margin over animation duration.
+    int timeoutMs = animationTransition->duration() + 1000;
+    if (timeoutMs < 1000) {
+        timeoutMs = 1000;
+    }
+    timeoutTimer.start(timeoutMs);
 
-    // Conecta o sinal de stateChanged para sair do loop quando a animação for pausada
-    connect(animationTransition, &QAbstractAnimation::stateChanged, [this, &loop, event, animationTransition](QAbstractAnimation::State newState, QAbstractAnimation::State oldState) {
-        handleAnimationStateChanged(newState, &loop, event, animationTransition);
-    });
-
+    // Log local loop entry and timeout guard values for this transition.
+    // Log the raw address to keep diagnostics safe in terminal lifecycle paths.
+    qInfo() << "GUI ModelGraphicsScene runAnimateTransition loop.exec enter transitionPtr=" << runningTransitionAddress
+            << "eventPtr=" << event
+            << "restart=" << restart
+            << "ready=" << animationTransition->isReadyToRun()
+            << "durationMs=" << animationTransition->duration()
+            << "timeoutMs=" << timeoutMs;
     // Aguarda a conclusão da animação sem bloquear o restante do código
     loop.exec();
+    // Reuse the raw address after loop exit to avoid QObject* debug streaming.
+    const void* postLoopTransitionAddress = static_cast<const void*>(animationTransition);
+    // Log local loop exit to capture timeout result for this transition execution.
+    qInfo() << "GUI ModelGraphicsScene runAnimateTransition loop.exec exit transitionPtr=" << postLoopTransitionAddress
+            << "eventPtr=" << event
+            << "timeout=" << exitedByTimeout;
 
-    _animationsTransition->removeOne(animationTransition);
+    // Stop and disconnect timer resources after leaving the local event loop.
+    if (timeoutTimer.isActive()) {
+        timeoutTimer.stop();
+    }
+    QObject::disconnect(timeoutConnection);
+
+    // Explicitly disconnect temporary local connections created for this run only.
+    QObject::disconnect(finishedConnection);
+    QObject::disconnect(destroyedConnection);
+    QObject::disconnect(stateChangedConnection);
+
+    // Stop post-loop processing when the transition was destroyed during loop execution.
+    if (guardedTransition.isNull()) {
+        // Log guarded pointer nullification when transition is deleted during loop execution.
+        // Keep guarded-null diagnostics on raw address only.
+        qInfo() << "GUI ModelGraphicsScene runAnimateTransition guardedTransitionNull=true"
+                << "transitionPtr=" << postLoopTransitionAddress
+                << "eventPtr=" << event;
+        _animationsTransition->removeOne(animationTransition);
+        return;
+    }
+
+    // Resolve the guarded pointer before any post-loop state checks or deletion.
+    AnimationTransition* transitionPtr = guardedTransition.data();
+    // Resolve a raw address snapshot for terminal cleanup logging.
+    const void* transitionAddress = static_cast<const void*>(transitionPtr);
+
+    // Perform terminal cleanup when loop exit happened through timeout.
+    if (exitedByTimeout && transitionPtr != nullptr) {
+        // Log timeout cleanup path before force-stopping and deleting transition.
+        qInfo() << "GUI ModelGraphicsScene runAnimateTransition terminalCleanup reason=timeout"
+                << "transitionPtr=" << transitionAddress
+                << "eventPtr=" << event
+                << "timeout=" << exitedByTimeout;
+        transitionPtr->stopAnimation();
+        _animationsTransition->removeOne(transitionPtr);
+        delete transitionPtr;
+        return;
+    }
+
+    // Remove and delete only when the guarded transition is still valid.
+    if (transitionPtr != nullptr) {
+        // Log final state used to choose paused retention or terminal destruction.
+        qInfo() << "GUI ModelGraphicsScene runAnimateTransition finalState="
+                << "transitionPtr=" << transitionAddress
+                << "eventPtr=" << event
+                << transitionPtr->state()
+                << "paused=" << (transitionPtr->state() == QAbstractAnimation::Paused);
+        _animationsTransition->removeOne(transitionPtr);
+        if (transitionPtr->state() != QAbstractAnimation::Paused) {
+            // Log terminal destruction path when transition does not remain paused.
+            qInfo() << "GUI ModelGraphicsScene runAnimateTransition cleanup destination=terminalDestroy"
+                    << "transitionPtr=" << transitionAddress
+                    << "eventPtr=" << event;
+            delete transitionPtr;
+        } else {
+            // Log paused retention path when transition remains available for resume.
+            qInfo() << "GUI ModelGraphicsScene runAnimateTransition cleanup destination=pausedMap"
+                    << "transitionPtr=" << transitionAddress
+                    << "eventPtr=" << event;
+        }
+    }
+
+    // Log final cleanup checkpoint after the transition is removed from active list.
+    qInfo() << "GUI ModelGraphicsScene runAnimateTransition cleanup final transitionPtr="
+            << transitionAddress
+            << "eventPtr=" << event;
 }
 
 void ModelGraphicsScene::handleAnimationStateChanged(QAbstractAnimation::State newState, QEventLoop* loop, Event* event, AnimationTransition* animationTransition) {
-    if (newState == QAbstractAnimation::Paused) {
-        if (!_animationPaused->contains(event)) {
-            QList<AnimationTransition *> *newList = new  QList<AnimationTransition *>();
-            _animationPaused->insert(event, newList);
-        }
-        _animationPaused->value(event)->append(animationTransition);
-        if (loop) loop->quit();
+    // Log each state notification with transition and event correlation keys.
+    qInfo() << "GUI ModelGraphicsScene handleAnimationStateChanged state=" << newState
+            << "eventPtr=" << event
+            << "transitionPtr=" << animationTransition;
+    // Process only paused transitions and exit early for other states.
+    if (newState != QAbstractAnimation::Paused) {
+        return;
     }
+
+    // Protect map usage when paused storage is not available.
+    if (_animationPaused == nullptr) {
+        return;
+    }
+
+    // Ignore invalid transition pointers to avoid storing null entries.
+    if (animationTransition == nullptr) {
+        return;
+    }
+
+    // Ensure there is a paused-animation list for the current event key.
+    if (!_animationPaused->contains(event)) {
+        QList<AnimationTransition*>* newList = new QList<AnimationTransition*>();
+        _animationPaused->insert(event, newList);
+    }
+
+    // Track whether paused-list append happened for deterministic state correlation.
+    bool appendedToPausedList = false;
+    // Append only when this transition is not already tracked for the event.
+    QList<AnimationTransition*>* pausedAnimations = _animationPaused->value(event);
+    if (pausedAnimations != nullptr && !pausedAnimations->contains(animationTransition)) {
+        // Log paused-list append when transition is first tracked for this event.
+        qInfo() << "GUI ModelGraphicsScene handleAnimationStateChanged appendPaused=true eventPtr=" << event
+                << "transitionPtr=" << animationTransition
+                << "state=" << newState;
+        pausedAnimations->append(animationTransition);
+        appendedToPausedList = true;
+    }
+
+    // Log paused-state handling outcome even when transition was already present.
+    qInfo() << "GUI ModelGraphicsScene handleAnimationStateChanged appendPaused="
+            << appendedToPausedList
+            << "eventPtr=" << event
+            << "transitionPtr=" << animationTransition
+            << "state=" << newState;
+
+    // Preserve local loop exit when the animation transitions to paused.
+    if (loop) loop->quit();
 }
 
 void ModelGraphicsScene::animateQueueInsert(ModelComponent *component, bool visivible) {
@@ -1292,12 +1882,32 @@ void ModelGraphicsScene::clearAnimations() {
 }
 
 void ModelGraphicsScene::clearAnimationsTransition() {
-    // Limpa lista de animações de transição
+    // Keep cleaning active transition animations owned by the transition list.
     if (_animationsTransition) {
         for (unsigned int i = 0; i < (unsigned int) _animationsTransition->size(); i++) {
             delete _animationsTransition->at(i);
         }
         _animationsTransition->clear();
+    }
+
+    // Release paused transition lists and destroy remaining paused animations.
+    if (_animationPaused) {
+        for (auto it = _animationPaused->begin(); it != _animationPaused->end(); ++it) {
+            QList<AnimationTransition*>* pausedAnimations = it.value();
+            if (pausedAnimations) {
+                // Stop each paused transition before terminal destruction.
+                for (AnimationTransition* animation : *pausedAnimations) {
+                    if (animation) {
+                        animation->stopAnimation();
+                        // Destroy paused transitions deterministically during terminal scene cleanup.
+                        delete animation;
+                    }
+                }
+                pausedAnimations->clear();
+                delete pausedAnimations;
+            }
+        }
+        _animationPaused->clear();
     }
 }
 
@@ -1408,8 +2018,87 @@ void ModelGraphicsScene::setUndoStack(QUndoStack* undo) {
 
 
 void ModelGraphicsScene::beginConnection() {
+    if (checkIgnoreEvent()) {
+        return;
+    }
     _connectingStep = 1;
-    ((QGraphicsView*)this->parent())->setCursor(Qt::CrossCursor);
+    _sourceGraphicalComponentPort = nullptr;
+    _destinationGraphicalComponentPort = nullptr;
+    // Set the connection cursor only when a valid parent view is available.
+    QGraphicsView* parentView = sceneParentGraphicsView(this);
+    if (parentView != nullptr) {
+        parentView->setCursor(Qt::CrossCursor);
+    }
+}
+
+void ModelGraphicsScene::resetConnectingState() {
+    _connectingStep = 0;
+    _sourceGraphicalComponentPort = nullptr;
+    _destinationGraphicalComponentPort = nullptr;
+    ModelGraphicsView* parentView = sceneParentModelGraphicsView(this);
+    if (parentView != nullptr) {
+        parentView->unsetCursor();
+    }
+}
+
+GraphicalComponentPort* ModelGraphicsScene::firstAvailableOutputPort(GraphicalModelComponent* component) const {
+    if (component == nullptr) {
+        return nullptr;
+    }
+    for (GraphicalComponentPort* outputPort : component->getGraphicalOutputPorts()) {
+        if (outputPort != nullptr && outputPort->getConnections()->empty()) {
+            return outputPort;
+        }
+    }
+    return nullptr;
+}
+
+GraphicalComponentPort* ModelGraphicsScene::firstInputPort(GraphicalModelComponent* component) const {
+    if (component == nullptr || component->getGraphicalInputPorts().empty()) {
+        return nullptr;
+    }
+    return component->getGraphicalInputPorts().at(0);
+}
+
+bool ModelGraphicsScene::tryCreateConnection(GraphicalComponentPort* source, GraphicalComponentPort* destination, bool notify) {
+    if (source == nullptr) {
+        qInfo() << "Connection failed: null source";
+        return false;
+    }
+    if (destination == nullptr) {
+        qInfo() << "Connection failed: null destination";
+        return false;
+    }
+    if (source == destination) {
+        qInfo() << "Connection failed: same port";
+        return false;
+    }
+    if (source->isInputPort()) {
+        qInfo() << "Connection failed: source is input";
+        return false;
+    }
+    if (!destination->isInputPort()) {
+        qInfo() << "Connection failed: destination is output";
+        return false;
+    }
+    if (!source->getConnections()->empty()) {
+        qInfo() << "Connection failed: source port occupied";
+        return false;
+    }
+
+    GraphicalConnection* graphicconnection = new GraphicalConnection(source, destination);
+    QUndoCommand *addUndoCommand = new AddUndoCommand(graphicconnection, this);
+    _undoStack->push(addUndoCommand);
+    qInfo() << "Connection created source=" << QString::fromStdString(source->graphicalComponent()->getComponent()->getName())
+            << "dest=" << QString::fromStdString(destination->graphicalComponent()->getComponent()->getName());
+
+    if (notify) {
+        notifyGraphicalModelChange(GraphicalModelEvent::EventType::CREATE,
+                                   GraphicalModelEvent::EventObjectType::CONNECTION,
+                                   graphicconnection);
+    }
+    resetConnectingState();
+    return true;
 }
 
 void ModelGraphicsScene::groupComponents(bool notify) {
@@ -1581,6 +2270,10 @@ void ModelGraphicsScene::ungroupModelComponents(QGraphicsItemGroup *group) {
 }
 
 void ModelGraphicsScene::removeGroup(QGraphicsItemGroup* group, bool notify) {
+    if (group == nullptr) {
+        return;
+    }
+
     //Recupere os itens individuais no grupo
     QList<QGraphicsItem*> itemsInGroup = group->childItems();
 
@@ -1589,10 +2282,18 @@ void ModelGraphicsScene::removeGroup(QGraphicsItemGroup* group, bool notify) {
 
     unsigned int size = itemsInGroup.size();
     for (unsigned int i = 0; i < size; i++) {
-        GraphicalModelComponent * gmc = dynamic_cast<GraphicalModelComponent *> (itemsInGroup.at(i));
+        QGraphicsItem* child = itemsInGroup.at(i);
+        if (GraphicalModelComponent * gmc = dynamic_cast<GraphicalModelComponent *> (child)) {
+            group->removeFromGroup(gmc);
+            removeComponent(gmc);
+            continue;
+        }
 
-        group->removeFromGroup(gmc);
-        removeComponent(gmc);
+        // Keep non-component children safe when removing mixed groups.
+        group->removeFromGroup(child);
+        if (child->scene() != this) {
+            addItem(child);
+        }
     }
     _graphicalGroups->removeOne(group);
     group->update();
@@ -1763,15 +2464,26 @@ void ModelGraphicsScene::arranjeModels(int direction) {
 //-------------------------
 
 bool ModelGraphicsScene::checkIgnoreEvent() {
-    if (_simulator->getModelManager()->current()->getSimulation()) {
-        if (_simulator->getModelManager()->current()->getSimulation()->isRunning()) {
-            return true;
-        } else {
-            return false;
-        }
-    } else {
+    if (_simulator == nullptr) {
         return false;
     }
+
+    auto* modelManager = _simulator->getModelManager();
+    if (modelManager == nullptr) {
+        return false;
+    }
+
+    auto* currentModel = modelManager->current();
+    if (currentModel == nullptr) {
+        return false;
+    }
+
+    auto* simulation = currentModel->getSimulation();
+    if (simulation == nullptr) {
+        return false;
+    }
+
+    return simulation->isRunning() || simulation->isPaused();
 }
 void ModelGraphicsScene::mousePressEvent(QGraphicsSceneMouseEvent *mouseEvent) {
     if (checkIgnoreEvent()) {
@@ -1779,12 +2491,55 @@ void ModelGraphicsScene::mousePressEvent(QGraphicsSceneMouseEvent *mouseEvent) {
         return;
     }
 
-    QGraphicsScene::mousePressEvent(mouseEvent);
-
     if (mouseEvent->button() == Qt::LeftButton) {
-
         QGraphicsItem* item = this->itemAt(mouseEvent->scenePos(), QTransform());
+        GraphicalComponentPort* clickedPort = dynamic_cast<GraphicalComponentPort*> (item);
 
+        if (_connectingStep > 0) {
+            if (clickedPort == nullptr) {
+                if (item == nullptr) {
+                    resetConnectingState();
+                }
+                mouseEvent->accept();
+                return;
+            }
+
+            if (_connectingStep == 1 && _sourceGraphicalComponentPort == nullptr && _destinationGraphicalComponentPort == nullptr) {
+                if (!clickedPort->isInputPort() && clickedPort->getConnections()->empty()) {
+                    _sourceGraphicalComponentPort = clickedPort;
+                    _connectingStep = 2;
+                    qInfo() << "Connect click source port=" << clickedPort->portNum();
+                    mouseEvent->accept();
+                    return;
+                }
+                if (clickedPort->isInputPort()) {
+                    _destinationGraphicalComponentPort = clickedPort;
+                    _connectingStep = 3;
+                    qInfo() << "Connect click destination port=" << clickedPort->portNum();
+                    mouseEvent->accept();
+                    return;
+                }
+                qInfo() << "Connection failed: invalid start port";
+                mouseEvent->accept();
+                return;
+            }
+            if (_connectingStep == 2) {
+                qInfo() << "Connect click destination port=" << clickedPort->portNum();
+                tryCreateConnection(_sourceGraphicalComponentPort, clickedPort, true);
+                mouseEvent->accept();
+                return;
+            }
+            if (_connectingStep == 3) {
+                qInfo() << "Connect click source port=" << clickedPort->portNum();
+                tryCreateConnection(clickedPort, _destinationGraphicalComponentPort, true);
+                mouseEvent->accept();
+                return;
+            }
+        }
+
+        QGraphicsScene::mousePressEvent(mouseEvent);
+
+        item = this->itemAt(mouseEvent->scenePos(), QTransform());
         if (GraphicalModelComponent *component = dynamic_cast<GraphicalModelComponent *> (item)) {
             component->setOldPosition(component->scenePos());
         } else {
@@ -1795,71 +2550,7 @@ void ModelGraphicsScene::mousePressEvent(QGraphicsSceneMouseEvent *mouseEvent) {
                 insertOldPositionItem(item, item->pos());
             }
         }
-
-        if (_connectingStep > 0) {
-            if (item != nullptr) {
-                GraphicalComponentPort* port = dynamic_cast<GraphicalComponentPort*> (item);
-                if (port != nullptr) {
-                    GraphicalComponentPort* src = dynamic_cast<GraphicalComponentPort*> (_sourceGraphicalComponentPort);
-                    GraphicalComponentPort* dst = dynamic_cast<GraphicalComponentPort*> (_destinationGraphicalComponentPort);
-
-                    if (_connectingStep == 1 && src == nullptr && dst == nullptr) {
-                        if (!port->isInputPort() && port->getConnections()->empty()) {
-                            _sourceGraphicalComponentPort = port;
-                            _connectingStep = 2;
-                            return;
-                        } else if (port->isInputPort()) {
-                            _destinationGraphicalComponentPort = port;
-                            _connectingStep = 3;
-                            return;
-                        }
-                    } else if (_connectingStep == 2 && port->isInputPort() && _sourceGraphicalComponentPort != nullptr) {
-                        _destinationGraphicalComponentPort = port;
-                        // create connection
-                        // in the model
-                        GraphicalConnection* graphicconnection = new GraphicalConnection(_sourceGraphicalComponentPort, _destinationGraphicalComponentPort);
-
-                        // faz essa limpeza pois quando cria a conexao ela ja adiciona essa conexao nas portas
-                        // porem o connectComponents ja faz isso pra quando há necessidade de fazer reconexao
-                        QUndoCommand *addUndoCommand = new AddUndoCommand(graphicconnection, this);
-                        _undoStack->push(addUndoCommand);
-
-                        addItem(graphicconnection);
-
-                        ((ModelGraphicsView *) (this->parent()))->unsetCursor();
-                        _connectingStep = 0;
-
-                        _sourceGraphicalComponentPort = nullptr;
-                        _destinationGraphicalComponentPort = nullptr;
-                        return;
-                    } else if (_connectingStep == 3 && !port->isInputPort() && _destinationGraphicalComponentPort != nullptr && port->getConnections()->empty()) {
-                        _sourceGraphicalComponentPort = port;
-                        // create connection
-                        // in the model
-                        GraphicalConnection* graphicconnection = new GraphicalConnection(_sourceGraphicalComponentPort, _destinationGraphicalComponentPort);
-
-                        // faz essa limpeza pois quando cria a conexao ela ja adiciona essa conexao nas portas
-                        // porem o connectComponents ja faz isso pra quando há necessidade de fazer reconexao
-                        QUndoCommand *addUndoCommand = new AddUndoCommand(graphicconnection, this);
-                        _undoStack->push(addUndoCommand);
-
-                        addItem(graphicconnection);
-
-                        ((ModelGraphicsView *) (this->parent()))->unsetCursor();
-                        _connectingStep = 0;
-
-                        _sourceGraphicalComponentPort = nullptr;
-                        _destinationGraphicalComponentPort = nullptr;
-                        return;
-                    }
-                }
-            } else {
-                _connectingStep = 0;
-                _sourceGraphicalComponentPort = nullptr;
-                _destinationGraphicalComponentPort = nullptr;
-                ((ModelGraphicsView *) (this->parent()))->setCursor(Qt::ArrowCursor);
-            }
-        } else if (_drawingMode != NONE) {
+        if (_drawingMode != NONE) {
             // Capturar o ponto de início do desenho
             _drawingStartPoint = mouseEvent->scenePos();
             _currentRectangle = nullptr;
@@ -1882,6 +2573,8 @@ void ModelGraphicsScene::mousePressEvent(QGraphicsSceneMouseEvent *mouseEvent) {
                 initializeAnimationDrawing(mouseEvent);
             }
         }
+    } else {
+        QGraphicsScene::mousePressEvent(mouseEvent);
     }
 }
 
@@ -1971,7 +2664,11 @@ void ModelGraphicsScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *mouseEvent)
             //Adicionar desenho a tela
             addGeometry(drawingEndPoint, false);
         }
-        ((ModelGraphicsView *) (this->parent()))->unsetCursor();
+        // Reset cursor only when the parent model view exists.
+        ModelGraphicsView* parentView = sceneParentModelGraphicsView(this);
+        if (parentView != nullptr) {
+            parentView->unsetCursor();
+        }
     } else if (_drawingMode == NONE && _currentPolygon != nullptr) {
         removeItem(_currentPolygon);
         _currentPolygon = nullptr;
@@ -1985,29 +2682,32 @@ void ModelGraphicsScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *mouseEv
         return;
     }
 
-    QGraphicsScene::mouseDoubleClickEvent(mouseEvent);
-
     QGraphicsItem* item = this->itemAt(mouseEvent->scenePos(), QTransform());
+    GraphicalComponentPort* port = dynamic_cast<GraphicalComponentPort*> (item);
 
-    if (_connectingStep == 0) {
-        _connectingStep = 1;
-
-        GraphicalComponentPort* port = dynamic_cast<GraphicalComponentPort*> (item);
-
-        if (port != nullptr) { // if doubleclick on a port, then start connecting
-            if (!port->isInputPort() && this->_connectingStep == 1 && port->getConnections()->empty()) {
-                _sourceGraphicalComponentPort = port;
-                _connectingStep = 2;
-            } else if (port->isInputPort() && this->_connectingStep == 1) {
-                _destinationGraphicalComponentPort = port;
-                _connectingStep = 3;
-            } else if (!port->isInputPort() && !port->getConnections()->empty()) {
-                _connectingStep = 0;
-            }
-        } else {
-            _connectingStep = 0;
+    if (port != nullptr) {
+        if (!port->isInputPort() && port->getConnections()->empty()) {
+            _sourceGraphicalComponentPort = port;
+            _destinationGraphicalComponentPort = nullptr;
+            _connectingStep = 2;
+            qInfo() << "Double-click connect mode source port=" << port->portNum();
+            mouseEvent->accept();
+            return;
         }
+        if (port->isInputPort()) {
+            _destinationGraphicalComponentPort = port;
+            _sourceGraphicalComponentPort = nullptr;
+            _connectingStep = 3;
+            qInfo() << "Double-click connect mode destination port=" << port->portNum();
+            mouseEvent->accept();
+            return;
+        }
+        qInfo() << "Connection failed: double-click output occupied";
+        mouseEvent->accept();
+        return;
     }
+
+    QGraphicsScene::mouseDoubleClickEvent(mouseEvent);
 
     if (AnimationCounter *animationCounter = dynamic_cast<AnimationCounter *>(item)) {
         DialogSelectCounter dialog;
@@ -2056,11 +2756,17 @@ void ModelGraphicsScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *mouseEv
 void ModelGraphicsScene::wheelEvent(QGraphicsSceneWheelEvent *wheelEvent) {
     QGraphicsScene::wheelEvent(wheelEvent);
     if (_controlIsPressed){
+        // Forward wheel zoom notifications only when the parent model view exists.
+        ModelGraphicsView* parentView = sceneParentModelGraphicsView(this);
         if (wheelEvent->delta() > 0){
-            ((ModelGraphicsView *)(this->parent()))->notifySceneWheelInEventHandler();
+            if (parentView != nullptr) {
+                parentView->notifySceneWheelInEventHandler();
+            }
         }
         else{
-            ((ModelGraphicsView *)(this->parent()))->notifySceneWheelOutEventHandler();
+            if (parentView != nullptr) {
+                parentView->notifySceneWheelOutEventHandler();
+            }
         }
         wheelEvent->accept();
     }
@@ -2214,7 +2920,11 @@ void ModelGraphicsScene::mouseMoveEvent(QGraphicsSceneMouseEvent *mouseEvent) {
 
     QGraphicsScene::mouseMoveEvent(mouseEvent);
 
-    ((ModelGraphicsView *) (this->parent()))->notifySceneMouseEventHandler(mouseEvent); // to show coords
+    // Forward mouse coordinates only when the parent model view exists.
+    ModelGraphicsView* parentView = sceneParentModelGraphicsView(this);
+    if (parentView != nullptr) {
+        parentView->notifySceneMouseEventHandler(mouseEvent); // to show coords
+    }
     if (_connectingStep > 0) {
         QGraphicsItem* item = this->itemAt(mouseEvent->scenePos(), QTransform());
         if (item != nullptr) {
@@ -2226,37 +2936,67 @@ void ModelGraphicsScene::mouseMoveEvent(QGraphicsSceneMouseEvent *mouseEvent) {
                     teste->getComponent();
                 }
                 if (_connectingStep == 1 && port->isInputPort()) {
-                    ((ModelGraphicsView *) (this->parent()))->setCursor(Qt::PointingHandCursor);
+                    // Show pointing cursor only when the parent model view exists.
+                    if (parentView != nullptr) {
+                        parentView->setCursor(Qt::PointingHandCursor);
+                    }
                 } else if (_connectingStep == 1 && !port->isInputPort() && port->getConnections()->empty()) {
-                    ((ModelGraphicsView *) (this->parent()))->setCursor(Qt::PointingHandCursor);
+                    // Show pointing cursor only when the parent model view exists.
+                    if (parentView != nullptr) {
+                        parentView->setCursor(Qt::PointingHandCursor);
+                    }
                 } else if (_connectingStep == 2 && port->isInputPort()) {
-                    ((ModelGraphicsView *) (this->parent()))->setCursor(Qt::PointingHandCursor);
+                    // Show pointing cursor only when the parent model view exists.
+                    if (parentView != nullptr) {
+                        parentView->setCursor(Qt::PointingHandCursor);
+                    }
                 } else if (_connectingStep == 3 && !port->isInputPort() && port->getConnections()->empty()) {
-                    ((ModelGraphicsView *) (this->parent()))->setCursor(Qt::PointingHandCursor);
+                    // Show pointing cursor only when the parent model view exists.
+                    if (parentView != nullptr) {
+                        parentView->setCursor(Qt::PointingHandCursor);
+                    }
                 }
                 return;
             }
         }
         if (_connectingStep > 1) {
-            ((ModelGraphicsView *) (this->parent()))->setCursor(Qt::ClosedHandCursor);
+            // Show closed-hand cursor only when the parent model view exists.
+            if (parentView != nullptr) {
+                parentView->setCursor(Qt::ClosedHandCursor);
+            }
         } else if (_connectingStep == 1){
-            ((ModelGraphicsView *) (this->parent()))->setCursor(Qt::CrossCursor);
+            // Show cross cursor only when the parent model view exists.
+            if (parentView != nullptr) {
+                parentView->setCursor(Qt::CrossCursor);
+            }
         }
     }  else if (_drawingMode != NONE && _drawing){
         if (_drawingMode == COUNTER || _drawingMode == VARIABLE || _drawingMode == TIMER) {
             continueAnimationDrawing(mouseEvent);
-            ((ModelGraphicsView *) (this->parent()))->setCursor(Qt::CrossCursor);
+            // Keep drawing cursor only when the parent model view exists.
+            if (parentView != nullptr) {
+                parentView->setCursor(Qt::CrossCursor);
+            }
         } else {
             //mostrar desenho se formando
             QPointF currentPoint = mouseEvent->scenePos();
             addGeometry(currentPoint, true);
 
             if (_drawingMode == LINE) {
-                ((ModelGraphicsView *) (this->parent()))->setCursor(Qt::SizeHorCursor);
+                // Show line-resize cursor only when the parent model view exists.
+                if (parentView != nullptr) {
+                    parentView->setCursor(Qt::SizeHorCursor);
+                }
             } else if (_drawingMode == POLYGON || _drawingMode == POLYGON_POINTS) {
-                ((ModelGraphicsView *) (this->parent()))->setCursor(Qt::ArrowCursor);
+                // Show arrow cursor only when the parent model view exists.
+                if (parentView != nullptr) {
+                    parentView->setCursor(Qt::ArrowCursor);
+                }
             } else {
-                ((ModelGraphicsView *) (this->parent()))->setCursor(Qt::CrossCursor);
+                // Show cross cursor only when the parent model view exists.
+                if (parentView != nullptr) {
+                    parentView->setCursor(Qt::CrossCursor);
+                }
             }
         }
 
@@ -2274,9 +3014,18 @@ void ModelGraphicsScene::focusOutEvent(QFocusEvent *focusEvent) {
 }
 
 void ModelGraphicsScene::dropEvent(QGraphicsSceneDragDropEvent *event) {
+    qInfo() << "ModelGraphicsScene::dropEvent scene=" << this
+            << " draggedItem=" << _objectBeingDragged
+            << " simulator=" << _simulator
+            << " currentModel=" << (_simulator ? _simulator->getModelManager()->current() : nullptr);
     if (checkIgnoreEvent()) {
         event->ignore();
         return;
+    }
+
+    GraphicalModelComponent* autoConnectSource = nullptr;
+    if (selectedItems().size() == 1) {
+        autoConnectSource = dynamic_cast<GraphicalModelComponent*>(selectedItems().at(0));
     }
 
     QGraphicsScene::dropEvent(event);
@@ -2288,20 +3037,63 @@ void ModelGraphicsScene::dropEvent(QGraphicsSceneDragDropEvent *event) {
             Plugin* plugin = _simulator->getPluginManager()->find(pluginname.toStdString());
             if (plugin != nullptr) {
                 if (plugin->getPluginInfo()->isComponent()) {
-                    destroyDiagram();
-
                     event->setDropAction(Qt::IgnoreAction);
                     event->accept();
                     // create component in the model
                     ModelComponent* component = (ModelComponent*) plugin->newInstance(_simulator->getModelManager()->current());
                     // create graphically
-                    addGraphicalModelComponent(plugin, component, event->scenePos(), color, true);
+                    addGraphicalModelComponent(plugin, component, event->scenePos(), color, true, autoConnectSource);
+                    // Defer synchronization until after the drop event completes and scene transforms settle.
+                    requestGraphicalDataDefinitionsSync();
                     return;
                 }
             }
         }
     }
     event->setAccepted(false);
+}
+
+void ModelGraphicsScene::requestGraphicalDataDefinitionsSync() {
+    // Coalesce chained requests to avoid running redundant synchronizations in the same event-loop turn.
+    if (_graphicalDataDefinitionsSyncPending || _graphicalDataDefinitionsSyncInProgress) {
+        return;
+    }
+    _graphicalDataDefinitionsSyncPending = true;
+
+    QPointer<ModelGraphicsScene> guardedScene(this);
+    QMetaObject::invokeMethod(this, [guardedScene]() {
+        if (guardedScene.isNull()) {
+            return;
+        }
+
+        // Clear pending state first so follow-up model mutations can enqueue another sync.
+        guardedScene->_graphicalDataDefinitionsSyncPending = false;
+        ScopedSyncInProgress scopedSyncFlag(&guardedScene->_graphicalDataDefinitionsSyncInProgress);
+        Simulator* simulator = guardedScene->_simulator;
+        if (simulator == nullptr || simulator->getModelManager() == nullptr || simulator->getModelManager()->current() == nullptr) {
+            return;
+        }
+
+        // Run canonical layer synchronization only when both the scene and active model are still valid.
+        GraphicalModelBuilder::synchronizeGraphicalDataDefinitionsLayer(simulator, guardedScene.data());
+    }, Qt::QueuedConnection);
+}
+
+// Keep compatibility with existing call sites while enforcing canonical queued scheduling.
+void ModelGraphicsScene::scheduleGraphicalDataDefinitionsSync() {
+    requestGraphicalDataDefinitionsSync();
+}
+
+bool ModelGraphicsScene::isGraphicalDataDefinitionsSyncInProgress() const {
+    return _graphicalDataDefinitionsSyncInProgress;
+}
+
+void ModelGraphicsScene::setConnectionGeometryUpdatesBlocked(bool blocked) {
+    _connectionGeometryUpdatesBlocked = blocked;
+}
+
+bool ModelGraphicsScene::areConnectionGeometryUpdatesBlocked() const {
+    return _connectionGeometryUpdatesBlocked;
 }
 
 void ModelGraphicsScene::contextMenuEvent(QGraphicsSceneContextMenuEvent *contextMenuEvent) {
@@ -2331,17 +3123,21 @@ void ModelGraphicsScene::dragMoveEvent(QGraphicsSceneDragDropEvent *event) {
 }
 
 void ModelGraphicsScene::keyPressEvent(QKeyEvent *keyEvent) {
+    if (checkIgnoreEvent()) {
+        keyEvent->ignore();
+        return;
+    }
     QGraphicsScene::keyPressEvent(keyEvent);
-    QList<QGraphicsItem*> selected = this->selectedItems();
+    QList<QGraphicsItem*> selected = userDeletableItems(this->selectedItems());
     if (keyEvent->key() == Qt::Key_Delete && selected.size() > 0) {
         QMessageBox::StandardButton reply = QMessageBox::question(this->_parentWidget, "Delete Component", "Are you sure you want to delete the selected components?", QMessageBox::Yes | QMessageBox::No);
         if (reply == QMessageBox::No) {
             return;
         }
 
-        destroyDiagram();
         QUndoCommand *deleteUndoCommand = new DeleteUndoCommand(selected, this);
         _undoStack->push(deleteUndoCommand);
+        requestGraphicalDataDefinitionsSync();
     }
     _controlIsPressed = (keyEvent->key() == Qt::Key_Control);
 }
@@ -2370,6 +3166,16 @@ void ModelGraphicsScene::drawingTimer() {
 
 void ModelGraphicsScene::setObjectBeingDragged(QTreeWidgetItem* objectBeingDragged) {
     _objectBeingDragged = objectBeingDragged;
+}
+
+// Toggle whether diagram items are currently being reconstructed from persisted .gui state.
+void ModelGraphicsScene::setRestoringPersistedGuiLayout(bool restoring) {
+    _restoringPersistedGuiLayout = restoring;
+}
+
+// Expose persisted-layout restoration state to avoid applying default-only grouping fallbacks.
+bool ModelGraphicsScene::isRestoringPersistedGuiLayout() const {
+    return _restoringPersistedGuiLayout;
 }
 
 void ModelGraphicsScene::setSimulator(Simulator *simulator) {
@@ -2462,14 +3268,19 @@ void ModelGraphicsScene::clearDrawingMode() {
     }
 
     _drawingMode = ModelGraphicsScene::NONE;
-    ((QGraphicsView*)this->parent())->setCursor(Qt::ArrowCursor);
+    // Restore default cursor only when a valid parent view is available.
+    QGraphicsView* parentView = sceneParentGraphicsView(this);
+    if (parentView != nullptr) {
+        parentView->setCursor(Qt::ArrowCursor);
+    }
 }
-QList<GraphicalModelComponent*>* ModelGraphicsScene::graphicalModelComponentItems(){
-    QList<GraphicalModelComponent*>* list = new QList<GraphicalModelComponent*>();
+// Build and return a temporary component list by value.
+QList<GraphicalModelComponent*> ModelGraphicsScene::graphicalModelComponentItems(){
+    QList<GraphicalModelComponent*> list;
     for(QGraphicsItem* item: this->items()) {
         GraphicalModelComponent* gmc = dynamic_cast<GraphicalModelComponent*>(item);
         if (gmc != nullptr) {
-            list->append(gmc);
+            list.append(gmc);
         }
     }
     return list;
@@ -2505,16 +3316,15 @@ void ModelGraphicsScene::clearAnimationsValues() {
 void ModelGraphicsScene::setCounters() {
     Model* currentModel = _simulator->getModelManager()->current();
 
-    QList<ModelDataDefinition *> *counters = nullptr;
-
     if (currentModel) {
         _counters->clear();
 
         List<ModelDataDefinition *> *countersList = currentModel->getDataManager()->getDataDefinitionList(Util::TypeOf<Counter>());
 
-        counters = new QList<ModelDataDefinition *>(countersList->list()->begin(), countersList->list()->end());
+        // Build the temporary data-definition list on the stack to avoid heap leaks.
+        QList<ModelDataDefinition *> counters(countersList->list()->begin(), countersList->list()->end());
 
-        foreach(ModelDataDefinition *counter, *counters) {
+        foreach(ModelDataDefinition *counter, counters) {
             Counter *newCounter = dynamic_cast<Counter *>(counter);
 
             if (newCounter) {
@@ -2527,16 +3337,15 @@ void ModelGraphicsScene::setCounters() {
 void ModelGraphicsScene::setVariables() {
     Model* currentModel = _simulator->getModelManager()->current();
 
-    QList<ModelDataDefinition *> *variables = nullptr;
-
     if (currentModel) {
         _variables->clear();
 
         List<ModelDataDefinition *> *variablesList = currentModel->getDataManager()->getDataDefinitionList(Util::TypeOf<Variable>());
 
-        variables = new QList<ModelDataDefinition *>(variablesList->list()->begin(), variablesList->list()->end());
+        // Build the temporary data-definition list on the stack to avoid heap leaks.
+        QList<ModelDataDefinition *> variables(variablesList->list()->begin(), variablesList->list()->end());
 
-        foreach(ModelDataDefinition *variable, *variables) {
+        foreach(ModelDataDefinition *variable, variables) {
             Variable *newVariable = dynamic_cast<Variable *>(variable);
 
             if (newVariable) {
@@ -2548,4 +3357,3 @@ void ModelGraphicsScene::setVariables() {
 //------------------------
 // Private
 //------------------------
-

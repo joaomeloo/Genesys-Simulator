@@ -6,7 +6,7 @@
 
 /*
  * File:   ModelDataDefinition.cpp
- * Author: rafael.luiz.cancian
+ * Author: Prof. Rafael Luiz Cancian, Dr. Eng.
  *
  * Created on 21 de Junho de 2018, 19:40
  */
@@ -50,8 +50,8 @@ ModelDataDefinition::ModelDataDefinition(Model* model, std::string thistypename,
 	_parentModel->getControls()->insert(propName);
 
 	// setting properties
-	_addProperty(propName);
-	_addProperty(propReportStatistics);
+	_addSimulationControl(propName);
+	_addSimulationControl(propReportStatistics);
 }
 
 bool ModelDataDefinition::hasChanged() const {
@@ -73,9 +73,35 @@ void ModelDataDefinition::setModelLevel(unsigned int _modelLevel) {
 //}
 
 ModelDataDefinition::~ModelDataDefinition() {
-	////trace(TraceManager::Level::L9_mostDetailed, "Removing Element \"" + this->_name + "\" from the model");
+	// Release all owned internal modeldata definitions registered by this model element.
 	_internalDataClear();
+	// Keep model registry consistent by removing this modeldata from the manager first.
 	_parentModel->getDataManager()->remove(this);
+	// Detach and destroy owned SimulationControl entries tracked by this model element.
+	if (_simulationControls != nullptr) {
+		for (SimulationControl* control : *_simulationControls->list()) {
+			if (control == nullptr) {
+				continue;
+			}
+			_parentModel->getControls()->remove(control);
+			SimulationResponse* response = dynamic_cast<SimulationResponse*>(control);
+			if (response != nullptr) {
+				_parentModel->getResponses()->remove(response);
+			}
+			delete control;
+		}
+		delete _simulationControls;
+		_simulationControls = nullptr;
+	}
+	// Destroy the internal-data registry container after its owned contents are cleared.
+	delete _internalData;
+	_internalData = nullptr;
+	// Clear and destroy the attached-data registry without deleting referenced external objects.
+	if (_attachedData != nullptr) {
+		_attachedData->clear();
+		delete _attachedData;
+		_attachedData = nullptr;
+	}
 }
 
 void ModelDataDefinition::_internalDataClear() {
@@ -153,12 +179,10 @@ void ModelDataDefinition::_attachedDataInsert(std::string key, ModelDataDefiniti
 }
 
 void ModelDataDefinition::_attachedDataRemove(std::string key) {
-	//for (std::map<std::string, ModelDataDefinition*>::iterator it = _internelElements->begin(); it != _internelElements->end(); it++) {
+	// Remove only the non-owning attachment registry entry and keep the referenced object lifetime untouched.
 	std::map<std::string, ModelDataDefinition*>::iterator it = _attachedData->begin();
 	while (it != _attachedData->end()) {
 		if ((*it).first == key) {
-			this->_parentModel->getDataManager()->remove((*it).second);
-			delete ((*it).second); //->~ModelDataDefinition();
 			_attachedData->erase(it);
 			it = _attachedData->begin();
 		} else {
@@ -188,6 +212,12 @@ void ModelDataDefinition::_checkCreateAttachedReferencedDataDefinition(std::stri
 		}
 		Util::DecIndent();
 	}
+	// Release temporary lists allocated during reference extraction to avoid local ownership leaks.
+	for (auto& pair : referencedDataDefinitions) {
+		delete pair.second;
+		pair.second = nullptr;
+	}
+	referencedDataDefinitions.clear();
 }
 
 bool ModelDataDefinition::_getSaveDefaultsOption() {
@@ -284,7 +314,7 @@ void ModelDataDefinition::setName(std::string name) {
 			}
 		}
 
-		for (/*PropertyBase**/PropertyBase* control : *_parentModel->getControls()->list()) {
+		for (SimulationControl* control : *_parentModel->getControls()->list()) {
 			stuffName = control->getName();
 			pos = stuffName.find(getName(), 0);
 			if (pos < stuffName.length()) { // != std::string::npos) {
@@ -293,7 +323,7 @@ void ModelDataDefinition::setName(std::string name) {
 			}
 		}
 
-		for (SimulationControl* response : *_parentModel->getResponses()->list()) {
+		for (SimulationResponse* response : *_parentModel->getResponses()->list()) {
 			stuffName = response->getName();
 			pos = stuffName.find(getName(), 0);
 			if (pos < stuffName.length()) {// != std::string::npos) {
@@ -384,22 +414,43 @@ void ModelDataDefinition::_createInternalAndAttachedData() {
 
 }
 
-void ModelDataDefinition::_addProperty(PropertyBase* property) {
-	_properties->insert(property);
+void ModelDataDefinition::_addSimulationControl(SimulationControl* control) {
+	_simulationControls->insert(control);
+}
+
+void ModelDataDefinition::_addProperty(SimulationControl* property) {
+	// Legacy compatibility wrapper.
+	_addSimulationControl(property);
 }
 
 /*
 void ModelDataDefinition::_addSimulationResponse(SimulationControl* response) {
 	_simulationResponses->insert(response); //@TODO: Check if exists before insert?
 }
-
-void ModelDataDefinition::_addSimulationControl(SimulationControl* control) {
-	_simulationControls->insert(control);
-}
 */
 
-List<PropertyBase*> *ModelDataDefinition::getProperties() const {
-	return _properties;
+List<SimulationControl*> *ModelDataDefinition::getProperties() const {
+	// Legacy compatibility wrapper.
+	return getSimulationControls();
+}
+
+List<SimulationControl*>* ModelDataDefinition::getSimulationControls() const {
+	return _simulationControls;
+}
+
+TraceManager::Level ModelDataDefinition::getTraceLevelSpecific() const{
+    return _traceLevelSpecific;
+}
+void ModelDataDefinition::defineTraceLevelSpecific(TraceManager::Level traceLevelSpecific, bool traceLevelSpecificEnabled){
+    _traceLevelSpecific = traceLevelSpecific;
+    _traceLevelSpecificEnabled = traceLevelSpecificEnabled;
+}
+
+bool ModelDataDefinition::isTraceLevelSpecificEnabled() const {
+    return _traceLevelSpecificEnabled;
+}
+void ModelDataDefinition::setTraceLevelSpecificEnabled(bool traceLevelSpecificEnabled) {
+    _traceLevelSpecificEnabled =traceLevelSpecificEnabled;
 }
 
 
@@ -415,27 +466,45 @@ bool ModelDataDefinition::isReportStatistics() const {
 }
 
 
-// just an easy access to trace manager
+// NOT just an easy access to trace manager, but a wrapper to check if specificTraceLevel applies
+
+bool ModelDataDefinition::_checkSpecificTraceLevel(TraceManager::Level level) {
+    if (_traceLevelSpecificEnabled && level > _traceLevelSpecific) {
+        return false;
+    }
+    return true;
+}
+
 void ModelDataDefinition::trace(std::string text, TraceManager::Level level){
-	_parentModel->getTracer()->traceReport(text, level);
+    if (_checkSpecificTraceLevel(level))
+        _parentModel->getTracer()->traceReport(text, level);
 }
 
 void ModelDataDefinition::traceError(std::string text, TraceManager::Level level){
-	_parentModel->getTracer()->traceError(text, level);
+    if (_checkSpecificTraceLevel(level))
+        _parentModel->getTracer()->traceError(text, level);
 }
 
 void ModelDataDefinition::traceError(std::string text, std::exception e) {
-	_parentModel->getTracer()->traceError(text, e);
+    _parentModel->getTracer()->traceError(text, e);
 }
 
 void ModelDataDefinition::traceReport(std::string text, TraceManager::Level level){
-	_parentModel->getTracer()->traceReport(text, level);
+    if (_checkSpecificTraceLevel(level))
+        _parentModel->getTracer()->traceReport(text, level);
+}
+
+void ModelDataDefinition::traceSimulation(void* thisobject, double time, Entity* entity, ModelComponent* component, std::string text, TraceManager::Level level) {
+    if (_checkSpecificTraceLevel(level))
+        _parentModel->getTracer()->traceSimulation(thisobject, time, entity, component, text, level, true);
 }
 
 void ModelDataDefinition::traceSimulation(void* thisobject, std::string text, TraceManager::Level level){
-	_parentModel->getTracer()->traceSimulation(thisobject, text, level);
+    if (_checkSpecificTraceLevel(level))
+        _parentModel->getTracer()->traceSimulation(thisobject, text, level, true);
 }
 
 void ModelDataDefinition::traceSimulation(void* thisobject, TraceManager::Level level, std::string text) {
-	_parentModel->getTracer()->traceSimulation(thisobject, text, level);
+    if (_checkSpecificTraceLevel(level))
+        _parentModel->getTracer()->traceSimulation(thisobject, text, level, true);
 }

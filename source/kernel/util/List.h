@@ -21,47 +21,70 @@
 #include <iterator>
 #include <functional>
 #include <algorithm>
-#include "Util.h"
-//#include "../simulator/ModelDataDefinition.h"
 
-//class Simulator;
 
 /*!
- * List corresponds to an extended version of the list that must guarantee the consistency of the elements that make up the simulation model.
+ * \brief Lightweight wrapper around \c std::list with convenience helpers used by the kernel.
+ *
+ * The class centralizes insertion/removal, rank-based access and iterator-like
+ * navigation patterns heavily used in simulator internals and plugin infrastructure.
  */
 template <typename T>
 class List {
 public:
 	using CompFunct = std::function<bool(const T, const T) >;
 public:
+	/*! \brief Creates an empty list and positions the internal iterator at the beginning. */
 	List();
-	List(List<T> &origin);
-	virtual ~List() = default;
+	/*! \brief Creates a copy of the source list. */
+	List(const List<T>& origin);
+	List<T>& operator=(const List<T>& origin);
+	virtual ~List();
 public: // direct access to list
+	/*! \brief Returns the number of stored elements. */
 	unsigned int size();
+	/*! \brief Indicates whether the list is empty. */
 	bool empty();
+	/*! \brief Removes all elements from the list. */
 	void clear();
+	/*! \brief Removes the first element from the list. */
 	void pop_front();
 	template<class Compare>
+	/*! \brief Sorts elements using the provided comparator. */
 	void sort(Compare comp);
+	/*! \brief Returns direct access to the encapsulated \c std::list structure. */
 	std::list<T>* list() const;
 public: // new methods
+	/*! \brief Creates a new default element of type \c T. */
 	T create();
 	template<typename U>
+	/*! \brief Creates a new \c T element using a construction argument. */
 	T create(U arg);
+	/*! \brief Generates a textual representation of elements for debugging. */
 	std::string show();
+	/*! \brief Searches for an element and returns an iterator to it (or \c end()). */
 	typename std::list<T>::iterator find(T element);
 	//int rankOf(T modeldatum); //!< returns the position (1st position=0) of the modeldatum if found, or negative value if not found
 public: // improved (easier) methods
+	/*! \brief Inserts an element preserving the current ordering policy. */
 	void insert(T element);
+	/*! \brief Removes all occurrences of the provided element. */
 	void remove(T element);
+	/*! \brief Replaces (or appends) an element at a specific rank. */
 	void setAtRank(unsigned int rank, T element);
+	/*! \brief Returns the element at the provided rank. */
 	T getAtRank(unsigned int rank);
+	/*! \brief Advances the internal iterator and returns the next element. */
 	T next();
+	/*! \brief Moves to the beginning and returns the first element. */
 	T front();
+	/*! \brief Moves to the end and returns the last element. */
 	T last();
+	/*! \brief Moves the internal iterator backward and returns the previous element. */
 	T previous();
+	/*! \brief Returns the element at the current internal iterator position. */
 	T current(); // get current modeldatum on the list (the last used)
+	/*! \brief Sets the comparison function used for ordered insertions. */
 	void setSortFunc(CompFunct _sortFunc);
 	//public: // @TODO: Shoul in a specialized class classed ObservableList
 	//	void addObserverHandler();
@@ -82,9 +105,25 @@ List<T>::List() {
 }
 
 template <typename T>
-List<T>::List(List<T> &origin) {
-	_list = new std::list<T>(origin);
-	_it = _list->begin(); // todo: check. end()? 2210
+List<T>::List(const List<T>& origin) {
+	_list = new std::list<T>(*origin._list);
+	_sortFunc = origin._sortFunc;
+	_it = _list->begin();
+}
+
+template <typename T>
+List<T>& List<T>::operator=(const List<T>& origin) {
+	if (this != &origin) {
+		*_list = *origin._list;
+		_sortFunc = origin._sortFunc;
+		_it = _list->begin();
+	}
+	return *this;
+}
+
+template <typename T>
+List<T>::~List() {
+	delete _list;
 }
 
 template <typename T>
@@ -137,10 +176,9 @@ void List<T>::pop_front() {
 
 template <typename T>
 void List<T>::remove(T element) {
+	// Reset the internal cursor after erasure to avoid dereferencing a stale iterator during recursive removals.
 	_list->remove(element);
-	if ((*_it) == element) { /*  @TODO: +: check this */
-		_it = _list->begin(); // if it points to the removed modeldatum, then changes to begin
-	}
+	_it = _list->begin();
 }
 
 template <typename T>

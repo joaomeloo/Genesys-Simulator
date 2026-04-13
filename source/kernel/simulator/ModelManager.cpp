@@ -24,10 +24,28 @@
 
 ModelManager::ModelManager(Simulator* simulator) {
 	_simulator = simulator;
+}
+
+ModelManager::~ModelManager() {
+	if (_models != nullptr) {
+		for (Model* model : *_models->list()) {
+			delete model;
+		}
+		// Releases a detached current model that is not tracked by the manager list.
+		if (_currentModel != nullptr && _models->find(_currentModel) == _models->list()->end()) {
+			delete _currentModel;
+		}
+		delete _models;
+		_models = nullptr;
+	}
 	_currentModel = nullptr;
 }
 
 Model* ModelManager::newModel() {
+	// Prevents leaking a previously created current model that was never inserted into _models.
+	if (_currentModel != nullptr && _models->find(_currentModel) == _models->list()->end()) {
+		delete _currentModel;
+	}
 	_currentModel = new Model(_simulator);
 	return _currentModel;
 }
@@ -64,11 +82,12 @@ Model* ModelManager::loadModel(std::string filename) {
 	if (res) {
 		this->insert(model);
 		_simulator->getTraceManager()->trace(TraceManager::Level::L2_results, "Model successfully loaded");
+		return model;
 	} else {
 		delete model; //->~Model();
 		_simulator->getTraceManager()->trace(TraceManager::Level::L2_results, "Model coud not be loaded");
+		return nullptr;
 	}
-	return model;
 }
 
 Model* ModelManager::createFromLanguage(std::string modelSpecification) {

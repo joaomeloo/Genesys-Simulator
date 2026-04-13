@@ -5,6 +5,21 @@ QT += charts
 greaterThan(QT_MAJOR_VERSION, 6): QT += widgets
 CONFIG += c++14
 
+# Enables temporary GUI diagnostic debug symbols and frame pointers only in debug builds.
+debug {
+    CONFIG += force_debug_info
+    QMAKE_CFLAGS_DEBUG += -g3 -O0 -fno-omit-frame-pointer
+    QMAKE_CXXFLAGS_DEBUG += -g3 -O0 -fno-omit-frame-pointer
+    QMAKE_LFLAGS_DEBUG += -rdynamic
+}
+
+# Enables optional ASan/UBSan instrumentation for GUI diagnostics when explicitly requested.
+gui_diagnostics:debug {
+    QMAKE_CFLAGS_DEBUG += -fsanitize=address,undefined
+    QMAKE_CXXFLAGS_DEBUG += -fsanitize=address,undefined
+    QMAKE_LFLAGS_DEBUG += -fsanitize=address,undefined
+}
+
 
 # Remova o pacote padrão de warnings do qmake
 CONFIG -= warn_on
@@ -36,6 +51,7 @@ SOURCES += \
     ../../../../kernel/simulator/ExperimentManager.cpp \
     ../../../../kernel/simulator/ExperimentManagerDefaultImpl1.cpp \
     ../../../../kernel/simulator/GenSerializer.cpp \
+    ../../../../kernel/simulator/GenesysPropertyIntrospection.cpp \
     ../../../../kernel/simulator/JsonSerializer.cpp \
     ../../../../kernel/simulator/LicenceManager.cpp \
     ../../../../kernel/simulator/Model.cpp \
@@ -55,7 +71,6 @@ SOURCES += \
     ../../../../kernel/simulator/ParserManager.cpp \
     ../../../../kernel/simulator/Persistence.cpp \
     ../../../../kernel/simulator/Plugin.cpp \
-    ../../../../kernel/simulator/PluginConnectorDummyImpl1.cpp \
     ../../../../kernel/simulator/PluginInformation.cpp \
     ../../../../kernel/simulator/PluginManager.cpp \
     ../../../../kernel/simulator/SimulationExperiment.cpp \
@@ -79,6 +94,7 @@ SOURCES += \
     ../../../../parser/Genesys++-scanner.cpp \
     ../../../../parser/GenesysParser.cpp \
     ../../../../parser/obj_t.cpp \
+    ../../../../plugins/PluginConnectorDummyImpl1.cpp \
     ../../../../plugins/components/Access.cpp \
     ../../../../plugins/components/Assign.cpp \
     ../../../../plugins/components/Batch.cpp \
@@ -87,7 +103,6 @@ SOURCES += \
     ../../../../plugins/components/CppForG.cpp \
     ../../../../plugins/components/Create.cpp \
     ../../../../plugins/components/Decide.cpp \
-    ../../../../plugins/components/DefaultModalModel.cpp \
     ../../../../plugins/components/Delay.cpp \
     ../../../../plugins/components/DiffEquations.cpp \
     ../../../../plugins/components/Dispose.cpp \
@@ -96,6 +111,9 @@ SOURCES += \
     ../../../../plugins/components/DummyComponent.cpp \
     ../../../../plugins/components/Enter.cpp \
     ../../../../plugins/components/Exit.cpp \
+    ../../../../plugins/components/ModalModelDefault.cpp \
+    ../../../../plugins/components/ModalModelFSM.cpp \
+    ../../../../plugins/components/ModalModelPetriNet.cpp \
 	../../../../plugins/components/ExtendedFSMComponent.cpp \
     ../../../../plugins/components/FSMState.cpp \
 	../../../../plugins/components/FSMTransition.cpp \
@@ -130,6 +148,9 @@ SOURCES += \
     ../../../../plugins/components/Unstore.cpp \
     ../../../../plugins/components/Write.cpp \
     ../../../../plugins/components/network/DefaultNode.cpp \
+    ../../../../plugins/components/network/DefaultTransitionExtensions.cpp \
+    ../../../../plugins/components/network/FSMState.cpp \
+    ../../../../plugins/components/network/PetriPlace.cpp \
 	../../../../plugins/components/tinyexpr/tinyexpr.c \
     ../../../../plugins/data/AssignmentItem.cpp \
     ../../../../plugins/data/CppCompiler.cpp \
@@ -149,8 +170,10 @@ SOURCES += \
     ../../../../plugins/data/Station.cpp \
     ../../../../plugins/data/Storage.cpp \
     ../../../../plugins/data/Variable.cpp \
+    ../../../../tools/FactorialDesign/FactorialDesign.cpp \
     ../../../../tools/FitterDummyImpl.cpp \
     ../../../../tools/HypothesisTesterDefaultImpl1.cpp \
+    ../../../../tools/OptimizerDefaultImpl1.cpp \
     ../../../../tools/ProbabilityDistribution.cpp \
     ../../../../tools/ProbabilityDistributionBase.cpp \
     ../../../../tools/SolverDefaultImpl1.cpp \
@@ -243,6 +266,32 @@ SOURCES += \
     ../../../terminal/examples/teaching/OperatingSystem03.cpp \
     ../../../terminal/examples/teaching/Rectifier.cpp \
     codeeditor/CodeEditor.cpp \
+    controllers/SimulationController.cpp \
+    # Phase-3 GUI refactor controller for model-inspector responsibilities.
+    controllers/ModelInspectorController.cpp \
+    # Phase-4 GUI refactor controllers for trace and simulation-event responsibilities.
+    controllers/TraceConsoleController.cpp \
+    controllers/SimulationEventController.cpp \
+    # Phase-5 GUI refactor controller for plugin-catalog responsibilities.
+    controllers/PluginCatalogController.cpp \
+    # Phase-6 GUI refactor controller for property-editor responsibilities.
+    controllers/PropertyEditorController.cpp \
+    # Phase-7 GUI refactor controller for model/application lifecycle responsibilities.
+    controllers/ModelLifecycleController.cpp \
+    # Phase-8 GUI refactor controller for simulation-command responsibilities.
+    controllers/SimulationCommandController.cpp \
+    # Phase-9 GUI refactor controller for edit-command responsibilities.
+    controllers/EditCommandController.cpp \
+    # Phase-10 GUI refactor controller for scene/view/drawing responsibilities.
+    controllers/SceneToolController.cpp \
+    # Phase-11 GUI refactor controller for dialog/utility responsibilities.
+    controllers/DialogUtilityController.cpp \
+    # Phase-1 GUI refactor services for model representations.
+    services/ModelLanguageSynchronizer.cpp \
+    services/GraphvizModelExporter.cpp \
+    services/CppModelExporter.cpp \
+    services/GraphicalModelSerializer.cpp \
+    services/GraphicalModelBuilder.cpp \
     mainwindow_controller.cpp \
     mainwindow_modelrepresentations.cpp \
     mainwindow_scene.cpp \
@@ -283,6 +332,8 @@ SOURCES += \
     graphicals/GraphicalImageAnimation.cpp \
     graphicals/GraphicalModelComponent.cpp \
     graphicals/GraphicalModelDataDefinition.cpp \
+    GuiCrashDiagnostics.cpp \
+    GuiScopeTrace.cpp \
     GraphicalReportManager.cpp \
     main.cpp \
     mainwindow.cpp \
@@ -311,6 +362,7 @@ HEADERS += \
     ../../../../kernel/simulator/ExperimentManagerDefaultImpl1.h \
     ../../../../kernel/simulator/ExperimetManager_if.h \
     ../../../../kernel/simulator/GenSerializer.h \
+    ../../../../kernel/simulator/GenesysPropertyIntrospection.h \
     ../../../../kernel/simulator/JsonSerializer.h \
     ../../../../kernel/simulator/LicenceManager.h \
     ../../../../kernel/simulator/Model.h \
@@ -332,7 +384,6 @@ HEADERS += \
     ../../../../kernel/simulator/Parser_if.h \
     ../../../../kernel/simulator/Persistence.h \
     ../../../../kernel/simulator/Plugin.h \
-    ../../../../kernel/simulator/PluginConnectorDummyImpl1.h \
     ../../../../kernel/simulator/PluginConnector_if.h \
     ../../../../kernel/simulator/PluginInformation.h \
     ../../../../kernel/simulator/PluginManager.h \
@@ -373,6 +424,7 @@ HEADERS += \
     ../../../../parser/parserBisonFlex/lexerparser.ll \
     ../../../../parser/position.hh \
     ../../../../parser/stack.hh \
+    ../../../../plugins/PluginConnectorDummyImpl1.h \
     ../../../../plugins/components/Access.h \
     ../../../../plugins/components/Assign.h \
     ../../../../plugins/components/Batch.h \
@@ -381,7 +433,6 @@ HEADERS += \
     ../../../../plugins/components/CppForG.h \
     ../../../../plugins/components/Create.h \
     ../../../../plugins/components/Decide.h \
-    ../../../../plugins/components/DefaultModalModel.h \
     ../../../../plugins/components/Delay.h \
     ../../../../plugins/components/DiffEquations.h \
     ../../../../plugins/components/Dispose.h \
@@ -390,6 +441,9 @@ HEADERS += \
     ../../../../plugins/components/DummyComponent.h \
     ../../../../plugins/components/Enter.h \
     ../../../../plugins/components/Exit.h \
+    ../../../../plugins/components/ModalModelDefault.h \
+    ../../../../plugins/components/ModalModelFSM.h \
+    ../../../../plugins/components/ModalModelPetriNet.h \
 	../../../../plugins/components/ExtendedFSMComponent.h \
     ../../../../plugins/components/FSMState.h \
 	../../../../plugins/components/FSMTransition.h \
@@ -424,6 +478,9 @@ HEADERS += \
     ../../../../plugins/components/Unstore.h \
     ../../../../plugins/components/Write.h \
     ../../../../plugins/components/network/DefaultNode.h \
+    ../../../../plugins/components/network/DefaultTransitionExtensions.h \
+    ../../../../plugins/components/network/FSMState.h \
+    ../../../../plugins/components/network/PetriPlace.h \
     ../../../../plugins/components/tinyexpr/tinyexpr.h \
     ../../../../plugins/data/AssignmentItem.h \
     ../../../../plugins/data/CppCompiler.h \
@@ -443,13 +500,25 @@ HEADERS += \
     ../../../../plugins/data/Station.h \
     ../../../../plugins/data/Storage.h \
     ../../../../plugins/data/Variable.h \
+    ../../../../tools/ContinuousDistribution_if.h \
     ../../../../tools/DataAnalyser_if.h \
+    ../../../../tools/DataSet_if.h \
+    ../../../../tools/DiscreteDistribution_if.h \
+    ../../../../tools/Distribution_if.h \
+    ../../../../tools/FactorialDesign/FactorialDesign.h \
+    ../../../../tools/FitterDefaultImpl.h \
     ../../../../tools/FitterDummyImpl.h \
     ../../../../tools/Fitter_if.h \
     ../../../../tools/HypothesisTesterDefaultImpl1.h \
     ../../../../tools/HypothesisTester_if.h \
+    ../../../../tools/OdeSolver_if.h \
+    ../../../../tools/OdeSystem_if.h \
+    ../../../../tools/OptimizerDefaultImpl1.h \
+    ../../../../tools/Optimizer_if.h \
     ../../../../tools/ProbabilityDistribution.h \
     ../../../../tools/ProbabilityDistributionBase.h \
+    ../../../../tools/Quadrature_if.h \
+    ../../../../tools/RootFinder_if.h \
     ../../../../tools/SolverDefaultImpl1.h \
     ../../../../tools/Solver_if.h \
     ../../../../tools/TraitsTools.h \
@@ -511,7 +580,6 @@ HEADERS += \
     ../../../terminal/examples/smarts/Smart_Buffer.h \
     ../../../terminal/examples/smarts/Smart_Clone.h \
     ../../../terminal/examples/smarts/Smart_CppForG.h \
-    ../../../terminal/examples/smarts/Smart_DefaultModalModel.h \
     ../../../terminal/examples/smarts/Smart_Delay.h \
     ../../../terminal/examples/smarts/Smart_Dummy.h \
 	../../../terminal/examples/smarts/Smart_EFSM_TrafficLight.h \
@@ -557,6 +625,32 @@ HEADERS += \
     propertyeditor/ComboBoxEnum.h \
     TraitsGUI.h \
     UtilGUI.h \
+    controllers/SimulationController.h \
+    # Phase-3 GUI refactor controller header for model-inspector responsibilities.
+    controllers/ModelInspectorController.h \
+    # Phase-4 GUI refactor controller headers for trace and simulation-event responsibilities.
+    controllers/TraceConsoleController.h \
+    controllers/SimulationEventController.h \
+    # Phase-5 GUI refactor controller header for plugin-catalog responsibilities.
+    controllers/PluginCatalogController.h \
+    # Phase-6 GUI refactor controller header for property-editor responsibilities.
+    controllers/PropertyEditorController.h \
+    # Phase-7 GUI refactor controller header for model/application lifecycle responsibilities.
+    controllers/ModelLifecycleController.h \
+    # Phase-8 GUI refactor controller header for simulation-command responsibilities.
+    controllers/SimulationCommandController.h \
+    # Phase-9 GUI refactor controller header for edit-command responsibilities.
+    controllers/EditCommandController.h \
+    # Phase-10 GUI refactor controller header for scene/view/drawing responsibilities.
+    controllers/SceneToolController.h \
+    # Phase-11 GUI refactor controller header for dialog/utility responsibilities.
+    controllers/DialogUtilityController.h \
+    # Phase-1 GUI refactor service headers.
+    services/ModelLanguageSynchronizer.h \
+    services/GraphvizModelExporter.h \
+    services/CppModelExporter.h \
+    services/GraphicalModelSerializer.h \
+    services/GraphicalModelBuilder.h \
     actions/AddUndoCommand.h \
     actions/DeleteUndoCommand.h \
     actions/GroupUndoCommand.h \
@@ -585,6 +679,8 @@ HEADERS += \
     graphicals/GraphicalDiagramConnection.h \
     graphicals/GraphicalImageAnimation.h \
     graphicals/GraphicalModelComponent.h \
+    GuiCrashDiagnostics.h \
+    GuiScopeTrace.h \
     graphicals/GraphicalModelDataDefinition.h \
     GraphicalReportManager.h \
     mainwindow.h \
@@ -668,7 +764,7 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
 DISTFILES += \
-    ../../../../../autoloadplugins.txt \
+    ../../../../tools/README_tools.md \
     ../../../terminal/examples/arenaSmarts/Arrivals Element Stops Entities Arriving After a Set Time Modificado.doe \
     propertyeditor/qtpropertybrowser/CMakeLists.txt \
     propertyeditor/qtpropertybrowser/images/cursor-arrow.png \
@@ -693,4 +789,3 @@ DISTFILES += \
 RESOURCES += \
     GenesysQtGUI_resources.qrc \
     propertyeditor/qtpropertybrowser/qtpropertybrowser.qrc
-

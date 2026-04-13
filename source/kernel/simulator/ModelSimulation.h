@@ -6,7 +6,7 @@
 
 /*
  * File:   ModelSimulation.h
- * Author: rafael.luiz.cancian
+ * Author: Prof. Rafael Luiz Cancian, Dr. Eng.
  *
  * Created on 7 de Novembro de 2018, 18:04
  */
@@ -15,6 +15,8 @@
 #define MODELSIMULATION_H
 
 #include <chrono>
+#include <memory>
+#include "SimulationControlAndResponse.h"
 #include "Event.h"
 #include "Entity.h"
 #include "ModelInfo.h"
@@ -30,13 +32,30 @@ class Model;
  * The ModelSimulation controls the simulation of a model, alowing to start, pause, resume e stop a simulation, composed by
  * a set of replications.
  */
+/**
+ * @brief Controls the mature, currently functional simulation-execution layer of a model.
+ *
+ * Historically, this class has been the original and operational experiment
+ * mechanism in GenESyS. It already supports the core execution workflow based on
+ * replications, replication length, warm-up configuration and event processing.
+ *
+ * Later experiment-oriented classes such as SimulationExperiment and
+ * SimulationScenario were introduced as an attempt to move richer
+ * design-of-experiments concerns into the kernel. Those newer classes are still
+ * under development, while ModelSimulation remains the stable execution core.
+ */
 class ModelSimulation { // 202104 to be subjected to SimulationScenario
 public:
 	ModelSimulation(Model* model);
-	virtual ~ModelSimulation() = default;
+	virtual ~ModelSimulation();
 public:
 	std::string show();
+// TODO(genesys|experiment-layer|architecture): Keep ModelSimulation as the stable
+// execution core while the higher-level experiment abstractions mature.
+// Any migration of responsibilities to SimulationExperiment/SimulationScenario
+// should preserve the already functional replication-based workflow here.
 public: // simulation control
+	/// @todo Revisit how this class should interact with the unfinished higher-level experiment layer.
 	void start(); //!< Starts a sequential execution of a simulation, ie, a set of replications of this model.
 	void pause(); //!<
 	void step(); //!< Executes the processing of a single event, the next one in the future events list.
@@ -84,6 +103,7 @@ public: // only gets
 	List<double>* getBreakpointsOnTime() const;
 	List<Entity*>* getBreakpointsOnEntity() const;
 	List<ModelComponent*>* getBreakpointsOnComponent() const;
+	const List<ModelDataDefinition*>* getSimulationStatisticsAggregates() const;
 public:
 	void loadInstance(PersistenceRecord *fields);
 	void saveInstance(PersistenceRecord *fields, bool saveDefaults);
@@ -111,7 +131,7 @@ private:
 	void _showSimulationHeader(); //!<
 	void _traceReplicationEnded(); //!<
 private:
-	SimulationEvent* _createSimulationEvent(void* thiscustomObject = nullptr); //!<
+	std::unique_ptr<SimulationEvent> _createSimulationEvent(void* thiscustomObject = nullptr); //!<
 	//friend Entity* Model::createEntity(std::string name, bool insertIntoModel); //@TODO: make it work (only friend functions, not the entire class)
 	//friend void Model::removeEntity(Entity* entity);
 	//friend void Model::sendEntityToComponent(Entity* entity, ModelComponent* component, double timeDelay, unsigned int componentinputPortNumber);
@@ -148,7 +168,7 @@ private:
 		const bool initializeSystem = true;
 		const bool showReportsAfterSimulation = true;
 		const bool showReportsAfterReplication = true;
-		const bool showSimulationControlsInReport = true;
+		const bool showSimulationControlsInReport = false;
 		const bool showSimulationResposesInReport = false;
 	} DEFAULT;
 	unsigned int _numberOfReplications = DEFAULT.numberOfReplications;
@@ -175,6 +195,8 @@ private:
 	Model* _model;
 	ModelInfo* _info;
 	SimulationReporter_if* _simulationReporter;
+	bool _ownsSimulationReporter = true;
+	List<SimulationControl*>* _ownedControls = new List<SimulationControl*>();
 	//@TODO Change List below to a MAP, associating every CstatOuCounter in the replication to the equivalent in the simulation
 	List<ModelDataDefinition*>* _cstatsAndCountersSimulation = new List<ModelDataDefinition*>();
 	std::map<ModelDataDefinition*, ModelDataDefinition*>* _cstatsAndCountersMapSimulation = new std::map<ModelDataDefinition*, ModelDataDefinition*>();
@@ -186,4 +208,3 @@ private:
 };
 //namespace\\}
 #endif /* MODELSIMULATION_H */
-
