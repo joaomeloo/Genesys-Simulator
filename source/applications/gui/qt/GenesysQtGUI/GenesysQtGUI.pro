@@ -149,7 +149,7 @@ SOURCES += \
     ../../../../plugins/components/Write.cpp \
     ../../../../plugins/components/network/DefaultNode.cpp \
     ../../../../plugins/components/network/DefaultTransitionExtensions.cpp \
-    ../../../../plugins/components/network/FSMState.cpp \
+    ../../../../plugins/components/network/FSMState_min.cpp \
     ../../../../plugins/components/network/PetriPlace.cpp \
 	../../../../plugins/components/tinyexpr/tinyexpr.c \
     ../../../../plugins/data/AssignmentItem.cpp \
@@ -479,7 +479,7 @@ HEADERS += \
     ../../../../plugins/components/Write.h \
     ../../../../plugins/components/network/DefaultNode.h \
     ../../../../plugins/components/network/DefaultTransitionExtensions.h \
-    ../../../../plugins/components/network/FSMState.h \
+    ../../../../plugins/components/network/FSMState_min.h \
     ../../../../plugins/components/network/PetriPlace.h \
     ../../../../plugins/components/tinyexpr/tinyexpr.h \
     ../../../../plugins/data/AssignmentItem.h \

@@ -49,6 +49,26 @@ void MainWindow::_simulatorTraceReportsHandler(TraceEvent e) {
     }
 }
 
+void MainWindow::_simulatorTraceResultsHandler(TraceEvent e) {
+    // Exibe HTML se detectar, senão texto puro. Se HTML já estiver exibido, ignora texto puro subsequente.
+    const std::string& msg = e.getText();
+    static bool htmlMostrado = false;
+    if ((msg.rfind("<html", 0) == 0) || (msg.rfind("<!DOCTYPE html", 0) == 0)) {
+        std::cout << "[HTML] " << msg.substr(0, 80) << (msg.size() > 80 ? "..." : "") << std::endl;
+        ui->textEdit_Results->clear();
+        ui->textEdit_Results->setHtml(QString::fromStdString(msg));
+        htmlMostrado = true;
+    } else {
+        if (htmlMostrado) {
+            // Se já exibiu HTML, ignora texto puro subsequente
+            return;
+        }
+        std::cout << msg << std::endl;
+        ui->textEdit_Results->append(QString::fromStdString(msg));
+    }
+    QCoreApplication::processEvents();
+}
+
 //
 // simulator event handlers
 //

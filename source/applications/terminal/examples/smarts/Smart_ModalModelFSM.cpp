@@ -1,18 +1,18 @@
-#include "Smart_ModalModelFSM.h"
+#include "Smart_ModalModelFSM_min.h"
 
 #include "../../../../kernel/simulator/Simulator.h"
 #include "../../../../plugins/components/Create.h"
 #include "../../../../plugins/components/Dispose.h"
 #include "../../../../plugins/components/ModalModelFSM.h"
-#include "../../../../plugins/components/network/FSMState.h"
+#include "../../../../plugins/components/network/FSMState_min.h"
 #include "../../../../plugins/components/network/DefaultTransitionExtensions.h"
 #include "../../../TraitsApp.h"
 #include "plugins/data/Variable.h"
 
-Smart_ModalModelFSM::Smart_ModalModelFSM() {
+Smart_ModalModelFSM_min::Smart_ModalModelFSM_min() {
 }
 
-int Smart_ModalModelFSM::main(int argc, char** argv) {
+int Smart_ModalModelFSM_min::main(int argc, char** argv) {
 	Simulator* genesys = new Simulator();
 	genesys->getTraceManager()->setTraceLevel(TraitsApp<GenesysApplication_if>::traceLevel);
 	setDefaultTraceHandlers(genesys->getTraceManager());
@@ -55,7 +55,7 @@ int Smart_ModalModelFSM::main(int argc, char** argv) {
 	fsm->getConnectionManager()->insert(dispose); // outputConnection[1] = finishing output
 
 	model->getSimulation()->setReplicationLength(30, Util::TimeUnit::second);
-	model->save("./models/Smart_ModalModelFSM.gen");
+	model->save("./models/Smart_ModalModelFSM_min.gen");
 	model->getSimulation()->start();
 
 	delete genesys;

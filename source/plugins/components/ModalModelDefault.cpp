@@ -20,7 +20,7 @@
 #include <memory>
 #include <unordered_map>
 
-#include "network/FSMState.h"
+#include "network/FSMState_min.h"
 //#include "../../kernel/simulator/Simulator.h"
 //#include "../../kernel/simulator/PluginManager.h"
 

@@ -82,7 +82,7 @@
 //#include "../../plugins/data/Segment.h"
 
 #include "../kernel/util/Util.h"
-#include "components/network/FSMState.h"
+#include "components/network/FSMState_min.h"
 
 //namespace GenesysKernel {
 
@@ -287,7 +287,7 @@ Plugin* PluginConnectorDummyImpl1::connect(const std::string dynamicLibraryFilen
     else if (fn == "modalmodelfsm.so")
         GetInfo = &ModalModelFSM::GetPluginInformation;
     else if (fn == "fsmstate.so")
-        GetInfo = &FSMState::GetPluginInformation;
+        GetInfo = &FSMState_min::GetPluginInformation;
     else if (fn == "modalmodelpetrinet.so")
         GetInfo = &ModalModelPetriNet::GetPluginInformation;
     //    GetInfo = &LSODE::GetPluginInformation;

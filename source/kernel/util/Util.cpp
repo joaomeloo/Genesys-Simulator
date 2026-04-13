@@ -336,11 +336,6 @@ void Util::FileDelete(const std::string& filename) {
 	std::remove(removeFilename);
 }
 
-std::string Util::PathFromFullFilename(const std::string& s) {
-	char sep = DirSeparator();
-	return s.substr(0, s.find_last_of(sep));
-}
-
 std::string Util::RunningPath() {
     char result[PATH_MAX];
 #ifdef __linux__

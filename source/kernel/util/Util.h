@@ -134,7 +134,10 @@ public: // files
 	static char DirSeparator();
 	static std::string FilenameFromFullFilename(const std::string& s);
 	static void FileDelete(const std::string& filename);
-	static inline std::string PathFromFullFilename(const std::string& s);
+	static inline std::string PathFromFullFilename(const std::string& s) {
+		char sep = DirSeparator();
+		return s.substr(0, s.find_last_of(sep));
+	}
 	static std::string RunningPath();
 	static std::vector<std::string> ListFiles(std::string dir, std::string fileFilter = "", mode_t attribFilter = S_IFREG & S_IFDIR);
 	static bool FileExists(const std::string& name);

@@ -2,10 +2,10 @@
 
 #include "DefaultNode.h"
 
-class FSMState : public DefaultNode {
+class FSMState_min : public DefaultNode {
 public:
-	FSMState(Model* model, std::string name = "");
-	virtual ~FSMState() = default;
+	FSMState_min(Model* model, std::string name = "");
+	virtual ~FSMState_min() = default;
 
 public:
 	void setEntryActionExpression(std::string expression);

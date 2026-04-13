@@ -15,7 +15,7 @@
 
 #include "GenesysShell/GenesysShell.h"
 #include "examples/smarts/Smart_ModalModelFSM.h"
-#include "examples/smarts/Smart_ExtendedFSM.h"
+#include "examples/smarts/Smart_Old_ExtendedFSM.h"
 #include "examples/smarts/Smart_CppForG.h"
 #include "examples/smarts/Smart_AssignWriteSeizes.h"
 #include "examples/smarts/Smart_EFSM_TrafficLight.h"
@@ -132,7 +132,7 @@ template <> struct TraitsTerminalApp<GenesysApplication_if> {
 	//typedef Half_Adder Application;
 
     // TEACHING
-    typedef AnElectronicAssemblyAndTestSystem Application;
+    // typedef AnElectronicAssemblyAndTestSystem Application;
     //typedef OperatingSystem01 Application;
     //typedef OperatingSystem02 Application;
     //typedef OperatingSystem03 Application;

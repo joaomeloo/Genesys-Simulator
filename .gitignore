@@ -51,7 +51,6 @@ obj/
 *.qmake.stash
 .qmake.cache
 Makefile
-GenesysQtGUI
 
 # Qt generated files
 moc_*.cpp
@@ -76,7 +75,6 @@ ui_*
 qrc_*
 *.idx
 *.pro.user
-*.qrc
 
 # OS files
 .DS_Store

@@ -13,8 +13,8 @@ bool SystemPreferences::load()
     QSettings settings("GenESyS", "Simulator");
     _startMaximized = settings.value("startMaximized", false).toBool();
     _autoLoadPlugins = settings.value("autoLoadPlugins", true).toBool();
-    _modelAtStart = settings.value("modelAtStart", 2).toUInt();
-    _modelfilename = settings.value("modelfilename", "../../../../../../../models/Smart_Delay.gen").toString().toStdString();
+    _openModelAtStart = settings.value("modelAtStart", 2).toUInt();
+    _modelfilenameToOpen = settings.value("modelfilename", "../../../../../../../models/Smart_Delay.gen").toString().toStdString();
     _darkMode = settings.value("darkMode", false).toBool();
     return true;
 }
@@ -24,8 +24,8 @@ bool SystemPreferences::save()
     QSettings settings("GenESyS", "Simulator");
     settings.setValue("startMaximized", _startMaximized);
     settings.setValue("autoLoadPlugins", _autoLoadPlugins);
-    settings.setValue("modelAtStart", _modelAtStart);
-    settings.setValue("modelfilename", QString::fromStdString(_modelfilename));
+    settings.setValue("modelAtStart", _openModelAtStart);
+    settings.setValue("modelfilename", QString::fromStdString(_modelfilenameToOpen));
     settings.setValue("darkMode", _darkMode);
     settings.sync();
     return true;
@@ -80,16 +80,6 @@ bool SystemPreferences::checkSystemPackagesAtStart()
 void SystemPreferences::setCheckSystemPackagesAtStart(bool newCheckSystemPackagesAtStart)
 {
     _checkSystemPackagesAtStart = newCheckSystemPackagesAtStart;
-}
-
-bool SystemPreferences::darkMode()
-{
-    return _darkMode;
-}
-
-void SystemPreferences::setDarkMode(bool newDarkMode)
-{
-    _darkMode = newDarkMode;
 }
 
 bool SystemPreferences::darkMode()
