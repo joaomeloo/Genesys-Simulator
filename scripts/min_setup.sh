@@ -31,7 +31,7 @@ install_gui() {
 install_prereqs() {
   echo "[+] Instalando pré-requisitos (git, g++, Qt6, Graphviz)"
   apt install -y \
-    git g++ vim \
+    git g++ vim cmake ninja-build \
     qt6-base-dev qt6-base-dev-tools \
     qt6-tools-dev qt6-tools-dev-tools \
     qt6-charts-dev \
@@ -102,6 +102,43 @@ configure_shortcuts() {
   fi
 }
 
+setup_startup_script() {
+  echo "[+] Configurando script remoto para executar no boot (systemd)"
+
+  STARTUP_SCRIPT="/usr/local/bin/startup.sh"
+  SERVICE_FILE="/etc/systemd/system/minha_app_startup.service"
+  SCRIPT_URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/2026-1/scripts/init.sh"
+
+  # Baixa o script remoto
+  curl -fsSL "$SCRIPT_URL" -o "$STARTUP_SCRIPT"
+
+  chmod +x "$STARTUP_SCRIPT"
+
+  # Cria o serviço systemd
+  cat > "$SERVICE_FILE" <<EOF
+[Unit]
+Description=Genesys Startup Script
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$STARTUP_SCRIPT
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  # Recarrega systemd
+  systemctl daemon-reexec
+  systemctl daemon-reload
+
+  # Habilita no boot
+  systemctl enable minha_app_startup.service
+}
+
 main() {
   require_root
 
@@ -110,6 +147,7 @@ main() {
   install_prereqs
   set_keyboard
   configure_shortcuts
+  setup_startup_script
   cleanup_system
   trim_and_zerofill
 
