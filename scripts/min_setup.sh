@@ -90,7 +90,13 @@ configure_shortcuts() {
         <command>xterm</command>\
       </action>\
     </keybind>' "$OPENBOX_CONF"
-    fi
+  
+    # Propaga para usuário
+    USER_CONF="/home/${USER_NAME}/.config/openbox"
+    mkdir -p "$USER_CONF"
+    cp "$OPENBOX_CONF" "$USER_CONF/lxde-rc.xml"
+    chown -R ${USER_NAME}:${USER_NAME} /home/${USER_NAME}/.config
+  fi
   else
     echo "Arquivo $OPENBOX_CONF não encontrado"
   fi
