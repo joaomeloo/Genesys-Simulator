@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# -------- CONFIGURÁVEIS --------
+USER_NAME="${SUDO_USER:-$(logname 2>/dev/null || echo vboxuser)}"
+KEYBOARD_CONF="/etc/default/keyboard"
+ZERO_FILL="${ZERO_FILL:-1}"   # 1 = habilita dd zero-fill
+# --------------------------------
+
+require_root() {
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "Execute como root: use 'su -' ou 'sudo -i'"
+    exit 1
+  fi
+}
+
+install_sudo_and_user() {
+  echo "[+] Instalando sudo e configurando usuário (${USER_NAME})"
+  apt update
+  apt install -y sudo
+  usermod -aG sudo "${USER_NAME}" || true
+}
+
+install_gui() {
+  echo "[+] Instalando Xorg + LXDE + LightDM"
+  apt update
+  DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends \
+    xorg lxde-core lightdm
+}
+
+install_prereqs() {
+  echo "[+] Instalando pré-requisitos (git, g++, Qt6, Graphviz)"
+  apt install -y \
+    git g++ \
+    qt6-base-dev qt6-base-dev-tools \
+    qt6-tools-dev qt6-tools-dev-tools \
+    qt6-charts-dev \
+    graphviz
+}
+
+set_keyboard() {
+  echo "[+] Configurando teclado ABNT2 (br)"
+  if [ -f "${KEYBOARD_CONF}" ]; then
+    sed -i \
+      -e 's/^XKBMODEL=.*/XKBMODEL="abnt2"/' \
+      -e 's/^XKBLAYOUT=.*/XKBLAYOUT="br"/' \
+      "${KEYBOARD_CONF}"
+  else
+    echo "Arquivo ${KEYBOARD_CONF} não encontrado; criando..."
+    cat > "${KEYBOARD_CONF}" <<EOF
+XKBMODEL="abnt2"
+XKBLAYOUT="br"
+EOF
+  fi
+
+  # aplicar imediatamente (quando possível)
+  setupcon || true
+  localectl set-x11-keymap br abnt2 || true
+}
+
+cleanup_system() {
+  echo "[+] Limpeza de pacotes e arquivos"
+  apt clean
+  apt autoremove --purge -y
+  rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/locale/* || true
+}
+
+trim_and_zerofill() {
+  echo "[+] fstrim"
+  fstrim -av || true
+
+  if [ "${ZERO_FILL}" -eq 1 ]; then
+    echo "[+] Preenchendo espaço livre com zeros (para melhorar compressão da OVA)"
+    dd if=/dev/zero of=/zero.fill bs=1M status=progress || true
+    rm -f /zero.fill
+  fi
+}
+
+main() {
+  require_root
+
+  install_sudo_and_user
+  install_gui
+  install_prereqs
+  set_keyboard
+  cleanup_system
+  trim_and_zerofill
+
+  echo "[+] Concluído. Reinicie a VM para aplicar completamente."
+}
+
+main "$@"
