@@ -106,11 +106,16 @@ setup_startup_script() {
   echo "[+] Configurando script remoto para executar no boot (systemd)"
 
   STARTUP_SCRIPT="/usr/local/bin/startup.sh"
-  SERVICE_FILE="/etc/systemd/system/minha_app_startup.service"
+  SERVICE_FILE="/etc/systemd/system/genesys_updater.service"
   SCRIPT_URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/2026-1/scripts/init.sh"
+  USER_NAME="vboxuser"
+  USER_HOME="/home/$USER_NAME"
 
   # Baixa o script remoto
-  wget -qO "$STARTUP_SCRIPT" "$SCRIPT_URL"
+  if ! wget -qO "$STARTUP_SCRIPT" "$SCRIPT_URL"; then
+    echo "Erro ao baixar script"
+    exit 1
+  fi
 
   chmod +x "$STARTUP_SCRIPT"
 
@@ -118,25 +123,28 @@ setup_startup_script() {
   cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=Genesys Startup Script
-After=network-online.target
-Wants=network-online.target
+After=graphical.target network-online.target
+Wants=graphical.target network-online.target
 
 [Service]
 Type=simple
-ExecStart=$STARTUP_SCRIPT
-Restart=always
 User=root
 
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=$USER_HOME/.Xauthority
+
+ExecStart=$STARTUP_SCRIPT
+
+Restart=on-failure
+RestartSec=5
+
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
 EOF
 
-  # Recarrega systemd
   systemctl daemon-reexec
   systemctl daemon-reload
-
-  # Habilita no boot
-  systemctl enable minha_app_startup.service
+  systemctl enable genesys_updater.service
 }
 
 main() {

@@ -26,8 +26,13 @@ ICON_DIR=/usr/share/icons/
 
 
 cd $REPO_DIR
+FIRST_INSTALL=1
 if [ ! -d Genesys-Simulator ]; then
+    gxmessage -buttons "" -timeout 9999 "Clonando GenESyS..." &
+    PID=$!
     git clone -b $BRANCH $REPO_URL
+    FIRST_INSTALL=0
+    kill $PID 2>/dev/null
 fi
 cd Genesys-Simulator
 
@@ -39,7 +44,7 @@ git fetch origin
 LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/$BRANCH)
 
-if [ "$LOCAL" != "$REMOTE" ]; then
+if [ "$LOCAL" != "$REMOTE" || "$FIRST_INSTALL" == 0 ]; then
 
     if gxmessage -buttons Sim:0,Não:1 \
              -default Sim \
