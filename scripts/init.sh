@@ -44,7 +44,7 @@ git fetch origin
 LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/$BRANCH)
 
-if [ "$LOCAL" != "$REMOTE" || "$FIRST_INSTALL" == 0 ]; then
+if [[ "$LOCAL" != "$REMOTE" || "$FIRST_INSTALL" == 0 ]]; then
 
     if gxmessage -buttons Sim:0,Não:1 \
              -default Sim \
