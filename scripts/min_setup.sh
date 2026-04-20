@@ -83,7 +83,7 @@ configure_shortcuts() {
 
   if [ -f "$OPENBOX_CONF" ]; then
     # Evita duplicação
-    if ! grep -q 'C-A-T' "$OPENBOX_CONF"; then
+    if ! grep -q '<keybind key="C-A-T">' "$OPENBOX_CONF"; then
       sed -i '/<\/keyboard>/i \
     <keybind key="C-A-T">\
       <action name="Execute">\
