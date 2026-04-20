@@ -110,7 +110,7 @@ setup_startup_script() {
   SCRIPT_URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/2026-1/scripts/init.sh"
 
   # Baixa o script remoto
-  curl -fsSL "$SCRIPT_URL" -o "$STARTUP_SCRIPT"
+  wget -qO "$SCRIPT_URL" "$STARTUP_SCRIPT"
 
   chmod +x "$STARTUP_SCRIPT"
 
