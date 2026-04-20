@@ -31,7 +31,7 @@ install_gui() {
 install_prereqs() {
   echo "[+] Instalando pré-requisitos (git, g++, Qt6, Graphviz)"
   apt install -y \
-    git g++ vim cmake ninja-build \
+    git g++ vim cmake ninja-build gxmessage \
     qt6-base-dev qt6-base-dev-tools \
     qt6-tools-dev qt6-tools-dev-tools \
     qt6-charts-dev \
@@ -110,7 +110,7 @@ setup_startup_script() {
   SCRIPT_URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/2026-1/scripts/init.sh"
 
   # Baixa o script remoto
-  wget -qO "$SCRIPT_URL" "$STARTUP_SCRIPT"
+  wget -qO "$STARTUP_SCRIPT" "$SCRIPT_URL"
 
   chmod +x "$STARTUP_SCRIPT"
 

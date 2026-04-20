@@ -2,7 +2,7 @@
 
 set -e
 
-DESTOK_APP_DIR=/home/vboxuser/.local/share/applications/
+DESKTOP_APP_DIR=/home/vboxuser/.local/share/applications/
 REPO_URL=https://github.com/rlcancian/Genesys-Simulator.git
 REPO_DIR=/home/vboxuser/Documents
 BRANCH=currentStable
@@ -26,7 +26,7 @@ ICON_DIR=/usr/share/icons/
 
 
 cd $REPO_DIR
-if [ ! -d Genesys-Simulator ] then
+if [ ! -d Genesys-Simulator ]; then
     git clone -b $BRANCH $REPO_URL
 fi
 cd Genesys-Simulator
@@ -41,12 +41,10 @@ REMOTE=$(git rev-parse origin/$BRANCH)
 
 if [ "$LOCAL" != "$REMOTE" ]; then
 
-    gxmessage -buttons Sim:0,Não:1 \
-              -default Não \
-              "Há uma nova versão do GenESyS disponível. Deseja atualizar?"
+    if gxmessage -buttons Sim:0,Não:1 \
+             -default Sim \
+             "Há uma nova versão do GenESyS disponível. Deseja atualizar?"; then
 
-    if [ $? -eq 0 ]; then
-        # Aviso de loading
         gxmessage -buttons "" -timeout 9999 "Atualizando..." &
         PID=$!
 
@@ -54,10 +52,12 @@ if [ "$LOCAL" != "$REMOTE" ]; then
 
         cmake --preset gui-app
         cmake --build --preset gui-app
-        cp -a $BUILD_GENESYS_GUI_APP_PATH $INSTALL_DIR
-        cp -a $PROJECT_ICON_PATH $ICON_DIR
 
-        # Adiciona genesys qt gui ao menu iniciar
+        cp -a "$BUILD_GENESYS_GUI_APP_PATH" "$INSTALL_DIR"
+        cp -a "$PROJECT_ICON_PATH" "$ICON_DIR"
+
+        mkdir -p "$DESKTOP_APP_DIR"
+
         printf '%s\n' \
             "[Desktop Entry]" \
             "Name=$GENESYS_GUI_APP_DISPLAY_NAME" \
@@ -66,9 +66,10 @@ if [ "$LOCAL" != "$REMOTE" ]; then
             "Type=Application" \
             "Terminal=false" \
             "Categories=Development;" \
+            > "${DESKTOP_APP_DIR}${GENESYS_GUI_APP_DISPLAY_NAME}.desktop"
             > "$DESTOK_APP_DIR$GENESYS_GUI_APP_DISPLAY_NAME.desktop"
         
-        rm -rf $REPO_DIR/Genesys-Simulator/build/
+        rm -rf "$REPO_DIR/Genesys-Simulator/build/"
 
         # qtcreator já está no menu iniciar por padrão
 
