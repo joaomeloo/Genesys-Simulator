@@ -31,7 +31,7 @@ install_gui() {
 install_prereqs() {
   echo "[+] Instalando pré-requisitos (git, g++, Qt6, Graphviz)"
   apt install -y \
-    git g++ \
+    git g++ vim \
     qt6-base-dev qt6-base-dev-tools \
     qt6-tools-dev qt6-tools-dev-tools \
     qt6-charts-dev \
@@ -76,6 +76,26 @@ trim_and_zerofill() {
   fi
 }
 
+configure_shortcuts() {
+  echo "[+] Configurando atalho Ctrl+Alt+T para abrir terminal"
+
+  OPENBOX_CONF="/etc/xdg/openbox/rc.xml"
+
+  if [ -f "$OPENBOX_CONF" ]; then
+    # Evita duplicação
+    if ! grep -q 'C-A-T' "$OPENBOX_CONF"; then
+      sed -i '/<\/keyboard>/i \
+    <keybind key="C-A-T">\
+      <action name="Execute">\
+        <command>xterm</command>\
+      </action>\
+    </keybind>' "$OPENBOX_CONF"
+    fi
+  else
+    echo "Arquivo $OPENBOX_CONF não encontrado"
+  fi
+}
+
 main() {
   require_root
 
@@ -83,6 +103,7 @@ main() {
   install_gui
   install_prereqs
   set_keyboard
+  configure_shortcuts
   cleanup_system
   trim_and_zerofill
 
