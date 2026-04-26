@@ -167,63 +167,49 @@ configure_shortcuts() {
 }
 
 setup_startup_script() {
-  echo "[+] Configurando script remoto para executar após login (systemd user)"
+  echo "[+] Configurando script remoto para executar via Autostart (XDG)"
 
   USER_NAME="vboxuser"
   USER_HOME="/home/$USER_NAME"
 
+  # Caminhos atualizados para Autostart
   STARTUP_SCRIPT="$USER_HOME/.local/bin/genesys_startup.sh"
-  SERVICE_DIR="$USER_HOME/.config/systemd/user"
-  SERVICE_FILE="$SERVICE_DIR/genesys_updater.service"
+  AUTOSTART_DIR="$USER_HOME/.config/autostart"
+  AUTOSTART_FILE="$AUTOSTART_DIR/genesys_init.desktop"
 
   SCRIPT_URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/2026-1/scripts/init.sh"
 
-  # Garante diretórios
+  echo "[+] Criando diretórios..."
   mkdir -p "$USER_HOME/.local/bin"
-  mkdir -p "$SERVICE_DIR"
   mkdir -p "$USER_HOME/Documents"
+  mkdir -p "$AUTOSTART_DIR"
 
-  chown -R "$USER_NAME:$USER_NAME" "$USER_HOME/.local"
-  chown -R "$USER_NAME:$USER_NAME" "$SERVICE_DIR"
-  chown "$USER_NAME:$USER_NAME" "$USER_HOME/Documents"
-
-  # Baixa o script remoto
+  echo "[+] Baixando script de inicialização..."
   if ! wget -qO "$STARTUP_SCRIPT" "$SCRIPT_URL"; then
-    echo "Erro ao baixar script"
+    echo "[-] Erro ao baixar script"
     exit 1
   fi
 
   chmod +x "$STARTUP_SCRIPT"
   chown "$USER_NAME:$USER_NAME" "$STARTUP_SCRIPT"
 
-  # Cria o serviço systemd (USER)
-  cat > "$SERVICE_FILE" <<EOF
-[Unit]
-Description=Genesys Updater (User Session)
-After=graphical-session.target network-online.target
-Wants=graphical-session.target network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=$STARTUP_SCRIPT
-RemainAfterExit=true
-
-[Install]
-WantedBy=default.target
+  echo "[+] Criando arquivo de autostart..."
+  cat > "$AUTOSTART_FILE" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Genesys Simulator Updater
+Comment=Verifica atualizações do GenESyS ao iniciar a sessão
+Exec=$STARTUP_SCRIPT
+Icon=system-software-update
+Terminal=false
+Categories=Development;
+X-GNOME-Autostart-enabled=true
 EOF
 
-  chown "$USER_NAME:$USER_NAME" "$SERVICE_FILE"
-
-  # Garante que serviços de usuário iniciem no login
-  loginctl enable-linger "$USER_NAME"
-
-  # Ativa como usuário
-  USER_ID=$(id -u "$USER_NAME")
-
-  su - "$USER_NAME" -c "XDG_RUNTIME_DIR=/run/user/$USER_ID systemctl --user daemon-reload"
-  su - "$USER_NAME" -c "XDG_RUNTIME_DIR=/run/user/$USER_ID systemctl --user enable genesys_updater.service"
-
-  echo "[+] Serviço configurado para rodar após login do usuário"
+  chown -R "$USER_NAME:$USER_NAME" "$USER_HOME/.local"
+  chown -R "$USER_NAME:$USER_NAME" "$USER_HOME/.config"
+  chown "$USER_NAME:$USER_NAME" "$USER_HOME/Documents"
+  chmod +x "$AUTOSTART_FILE"
 }
 
 main() {
