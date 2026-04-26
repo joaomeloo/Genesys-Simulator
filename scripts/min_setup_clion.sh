@@ -215,8 +215,10 @@ EOF
   chown "$USER_NAME:$USER_NAME" "$SERVICE_FILE"
 
   # Ativa como usuário
-  sudo -u "$USER_NAME" systemctl --user daemon-reload
-  sudo -u "$USER_NAME" systemctl --user enable genesys_updater.service
+  USER_ID=$(id -u "$USER_NAME")
+
+  su - "$USER_NAME" -c "XDG_RUNTIME_DIR=/run/user/$USER_ID systemctl --user daemon-reload"
+  su - "$USER_NAME" -c "XDG_RUNTIME_DIR=/run/user/$USER_ID systemctl --user enable genesys_updater.service"
 
   # Garante que serviços de usuário iniciem no login
   loginctl enable-linger "$USER_NAME"
