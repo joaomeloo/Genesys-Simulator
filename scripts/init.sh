@@ -1,6 +1,9 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
+set -x
+LOGFILE=/tmp/genesys_install.log
+exec > >(tee -a "$LOGFILE") 2>&1
 
 DESKTOP_APP_DIR=/home/vboxuser/.local/share/applications/
 REPO_URL=https://github.com/rlcancian/Genesys-Simulator.git
@@ -72,7 +75,6 @@ if [[ "$LOCAL" != "$REMOTE" || "$FIRST_INSTALL" == 0 ]]; then
             "Terminal=false" \
             "Categories=Development;" \
             > "${DESKTOP_APP_DIR}${GENESYS_GUI_APP_DISPLAY_NAME}.desktop"
-            > "$DESTOK_APP_DIR$GENESYS_GUI_APP_DISPLAY_NAME.desktop"
         
         rm -rf "$REPO_DIR/Genesys-Simulator/build/"
 
