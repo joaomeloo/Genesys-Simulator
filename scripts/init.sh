@@ -24,8 +24,10 @@ PROJECT_ICON_PATH+=/Genesys-Simulator/source/applications/gui/qt/GenesysQtGUI/re
 PROJECT_ICON_PATH+=$ICON_NAME
 
 # Instalacao
-INSTALL_DIR=/usr/bin/
-ICON_DIR=/usr/share/icons/
+INSTALL_DIR=$HOME/.local/bin/
+mkdir -p "$INSTALL_DIR"
+ICON_DIR=$HOME/.local/share/icons/
+mkdir -p "$ICON_DIR"
 
 
 cd $REPO_DIR
