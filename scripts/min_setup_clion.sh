@@ -167,15 +167,24 @@ configure_shortcuts() {
 }
 
 setup_startup_script() {
-  echo "[+] Configurando script remoto para executar no boot (systemd)"
+  echo "[+] Configurando script remoto para executar após login (systemd user)"
 
-  STARTUP_SCRIPT="/usr/local/bin/startup.sh"
-  SERVICE_FILE="/etc/systemd/system/genesys_updater.service"
-  SCRIPT_URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/2026-1/scripts/init.sh"
   USER_NAME="vboxuser"
   USER_HOME="/home/$USER_NAME"
 
+  STARTUP_SCRIPT="$USER_HOME/.local/bin/genesys_startup.sh"
+  SERVICE_DIR="$USER_HOME/.config/systemd/user"
+  SERVICE_FILE="$SERVICE_DIR/genesys_updater.service"
+
+  SCRIPT_URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/2026-1/scripts/init.sh"
+
+  # Garante diretórios
+  mkdir -p "$USER_HOME/.local/bin"
+  mkdir -p "$SERVICE_DIR"
   mkdir -p "$USER_HOME/Documents"
+
+  chown -R "$USER_NAME:$USER_NAME" "$USER_HOME/.local"
+  chown -R "$USER_NAME:$USER_NAME" "$SERVICE_DIR"
   chown "$USER_NAME:$USER_NAME" "$USER_HOME/Documents"
 
   # Baixa o script remoto
@@ -185,33 +194,34 @@ setup_startup_script() {
   fi
 
   chmod +x "$STARTUP_SCRIPT"
+  chown "$USER_NAME:$USER_NAME" "$STARTUP_SCRIPT"
 
-  # Cria o serviço systemd
+  # Cria o serviço systemd (USER)
   cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=Genesys Startup Script
-After=graphical.target network-online.target
-Wants=graphical.target network-online.target
+Description=Genesys Updater (User Session)
+After=graphical-session.target network-online.target
+Wants=graphical-session.target network-online.target
 
 [Service]
-Type=simple
-User=root
-
-Environment=DISPLAY=:0
-Environment=XAUTHORITY=$USER_HOME/.Xauthority
-
+Type=oneshot
 ExecStart=$STARTUP_SCRIPT
-
-Restart=on-failure
-RestartSec=5
+RemainAfterExit=true
 
 [Install]
-WantedBy=graphical.target
+WantedBy=default.target
 EOF
 
-  systemctl daemon-reexec
-  systemctl daemon-reload
-  systemctl enable genesys_updater.service
+  chown "$USER_NAME:$USER_NAME" "$SERVICE_FILE"
+
+  # Ativa como usuário
+  sudo -u "$USER_NAME" systemctl --user daemon-reload
+  sudo -u "$USER_NAME" systemctl --user enable genesys_updater.service
+
+  # Garante que serviços de usuário iniciem no login
+  loginctl enable-linger "$USER_NAME"
+
+  echo "[+] Serviço configurado para rodar após login do usuário"
 }
 
 main() {
