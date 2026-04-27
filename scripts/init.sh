@@ -29,6 +29,10 @@ mkdir -p "$INSTALL_DIR"
 ICON_DIR=$HOME/.local/share/icons/
 mkdir -p "$ICON_DIR"
 
+# Espera conexão com rede
+until getent hosts github.com >/dev/null 2>&1; do
+  sleep 1
+done
 
 cd $REPO_DIR
 FIRST_INSTALL=1
