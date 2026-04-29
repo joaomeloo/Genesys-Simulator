@@ -77,6 +77,7 @@ install_prereqs() {
     qt6-base-dev qt6-base-dev-tools \
     qt6-tools-dev qt6-tools-dev-tools \
     qt6-charts-dev \
+    libsbml5-dev r-base ngspice \
     graphviz
 }
 
