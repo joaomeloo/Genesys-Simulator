@@ -3,6 +3,7 @@ set -euo pipefail
 
 # -------- CONFIGURÁVEIS --------
 USER_NAME="${SUDO_USER:-$(logname 2>/dev/null || echo vboxuser)}"
+USER_HOME="/home/$USER_NAME"
 KEYBOARD_CONF="/etc/default/keyboard"
 ZERO_FILL="${ZERO_FILL:-1}"   # 1 = habilita dd zero-fill
 # --------------------------------
@@ -34,8 +35,31 @@ install_prereqs() {
     git g++ vim cmake ninja-build gxmessage \
     qt6-base-dev qt6-base-dev-tools \
     qt6-tools-dev qt6-tools-dev-tools \
-    qt6-charts-dev \
+    qt6-charts-dev qtcreator \
+    libsbml5-dev r-base ngspice \
     graphviz
+}
+
+install_firefox() {
+  echo "[+] Instalando Firefox ESR"
+  apt install -y firefox-esr
+}
+
+set_firefox_default() {
+  echo "[+] Definindo Firefox ESR como navegador padrão"
+
+  sudo -u "$USER_NAME" bash <<EOF
+mkdir -p ~/.config
+
+cat > ~/.config/mimeapps.list <<EOL
+[Default Applications]
+text/html=firefox-esr.desktop
+x-scheme-handler/http=firefox-esr.desktop
+x-scheme-handler/https=firefox-esr.desktop
+x-scheme-handler/about=firefox-esr.desktop
+x-scheme-handler/unknown=firefox-esr.desktop
+EOL
+EOF
 }
 
 set_keyboard() {
@@ -103,48 +127,49 @@ configure_shortcuts() {
 }
 
 setup_startup_script() {
-  echo "[+] Configurando script remoto para executar no boot (systemd)"
+  echo "[+] Configurando script remoto para executar via Autostart (XDG)"
 
-  STARTUP_SCRIPT="/usr/local/bin/startup.sh"
-  SERVICE_FILE="/etc/systemd/system/genesys_updater.service"
-  SCRIPT_URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/2026-1/scripts/init.sh"
   USER_NAME="vboxuser"
   USER_HOME="/home/$USER_NAME"
 
-  # Baixa o script remoto
+  # Caminhos atualizados para Autostart
+  STARTUP_SCRIPT="$USER_HOME/.local/bin/genesys_startup.sh"
+  AUTOSTART_DIR="$USER_HOME/.config/autostart"
+  AUTOSTART_FILE="$AUTOSTART_DIR/genesys_init.desktop"
+
+  SCRIPT_URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/2026-1/scripts/init.sh"
+
+  echo "[+] Criando diretórios..."
+  mkdir -p "$USER_HOME/.local/bin"
+  mkdir -p "$USER_HOME/Documents"
+  mkdir -p "$AUTOSTART_DIR"
+
+  echo "[+] Baixando script de inicialização..."
   if ! wget -qO "$STARTUP_SCRIPT" "$SCRIPT_URL"; then
-    echo "Erro ao baixar script"
+    echo "[-] Erro ao baixar script"
     exit 1
   fi
 
   chmod +x "$STARTUP_SCRIPT"
+  chown "$USER_NAME:$USER_NAME" "$STARTUP_SCRIPT"
 
-  # Cria o serviço systemd
-  cat > "$SERVICE_FILE" <<EOF
-[Unit]
-Description=Genesys Startup Script
-After=graphical.target network-online.target
-Wants=graphical.target network-online.target
-
-[Service]
-Type=simple
-User=root
-
-Environment=DISPLAY=:0
-Environment=XAUTHORITY=$USER_HOME/.Xauthority
-
-ExecStart=$STARTUP_SCRIPT
-
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=graphical.target
+  echo "[+] Criando arquivo de autostart..."
+  cat > "$AUTOSTART_FILE" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Genesys Simulator Updater
+Comment=Verifica atualizações do GenESyS ao iniciar a sessão
+Exec=$STARTUP_SCRIPT
+Icon=system-software-update
+Terminal=false
+Categories=Development;
+X-GNOME-Autostart-enabled=true
 EOF
 
-  systemctl daemon-reexec
-  systemctl daemon-reload
-  systemctl enable genesys_updater.service
+  chown -R "$USER_NAME:$USER_NAME" "$USER_HOME/.local"
+  chown -R "$USER_NAME:$USER_NAME" "$USER_HOME/.config"
+  chown "$USER_NAME:$USER_NAME" "$USER_HOME/Documents"
+  chmod +x "$AUTOSTART_FILE"
 }
 
 main() {
@@ -153,6 +178,8 @@ main() {
   install_sudo_and_user
   install_gui
   install_prereqs
+  install_firefox
+  set_firefox_default
   set_keyboard
   configure_shortcuts
   setup_startup_script
