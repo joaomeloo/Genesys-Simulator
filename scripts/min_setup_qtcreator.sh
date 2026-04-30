@@ -172,6 +172,23 @@ EOF
   chmod +x "$AUTOSTART_FILE"
 }
 
+install_guest_add_util() {
+  local URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/scripts/install_guest_add.sh"
+  local TARGET="/usr/local/bin/install_guest_add"
+
+  echo "[+] Instalando utilitário install_guest_add..."
+
+  if ! wget -qO "$TARGET" "$URL"; then
+    echo "[-] Falha no download"
+    return 1
+  fi
+
+  # Permissão de execução
+  chmod +x "$TARGET"
+
+  echo "[+] Instalado em: $TARGET"
+}
+
 main() {
   require_root
 
@@ -183,6 +200,7 @@ main() {
   set_keyboard
   configure_shortcuts
   setup_startup_script
+  install_guest_add_util
   cleanup_system
   trim_and_zerofill
 
