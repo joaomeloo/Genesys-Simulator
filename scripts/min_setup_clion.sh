@@ -231,6 +231,72 @@ install_guest_add_util() {
   echo "[+] Instalado em: $TARGET"
 }
 
+setup_ova_updater() {
+  echo "[+] Configurando updater da OVA com retry via systemd"
+
+  local RUNNER="/usr/local/bin/ova_update_runner"
+  local SERVICE="/etc/systemd/system/ova-update.service"
+  local UPDATE_URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/2026-1/scripts/update.sh"
+
+  # Runner (falha de propósito se não conseguir baixar)
+  cat > "$RUNNER" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+TMP_SCRIPT="/tmp/update.sh"
+UPDATE_URL="$UPDATE_URL"
+
+echo "[+] OVA updater iniciado (root)"
+
+# precisa de wget
+command -v wget >/dev/null 2>&1
+
+# tenta baixar (se falhar, script falha → systemd reinicia)
+wget -qO "\$TMP_SCRIPT" "\$UPDATE_URL"
+
+chmod +x "\$TMP_SCRIPT"
+
+# executa (se falhar, também dispara retry do systemd)
+"\$TMP_SCRIPT"
+
+rm -f "\$TMP_SCRIPT"
+
+echo "[+] Update finalizado com sucesso"
+EOF
+
+  chmod +x "$RUNNER"
+
+  # Service com retry
+  cat > "$SERVICE" <<EOF
+[Unit]
+Description=OVA Auto Update (root)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=$RUNNER
+
+# Retry controlado pelo systemd
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=20
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  echo "[+] Recarregando systemd..."
+  systemctl daemon-reexec
+  systemctl daemon-reload
+
+  echo "[+] Habilitando serviço..."
+  systemctl enable ova-update.service
+
+  echo "[+] Updater configurado com retry via systemd"
+}
+
 main() {
   require_root
 
@@ -244,6 +310,7 @@ main() {
   configure_shortcuts
   setup_startup_script
   install_guest_add_util
+  setup_ova_updater
   cleanup_system
   trim_and_zerofill
 
