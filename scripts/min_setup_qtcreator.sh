@@ -173,7 +173,7 @@ EOF
 }
 
 install_guest_add_util() {
-  local URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/scripts/install_guest_add.sh"
+  local URL="https://raw.githubusercontent.com/joaomeloo/Genesys-Simulator/refs/heads/2026-1/scripts/install_guest_add.sh"
   local TARGET="/usr/local/bin/install_guest_add"
 
   echo "[+] Instalando utilitário install_guest_add..."
