@@ -17,6 +17,9 @@ BUILD_GENESYS_GUI_APP_PATH=$REPO_DIR
 BUILD_GENESYS_GUI_APP_PATH+=/Genesys-Simulator/build/gui-app/source/applications/gui/qt/GenesysQtGUI/
 BUILD_GENESYS_GUI_APP_PATH+=$GENESYS_GUI_APP_EXEC
 
+GENESYS_WEB_APP_EXEC="genesys_web_app"
+BUILD_GENESYS_WEB_APP_PATH="$REPO_DIR/Genesys-Simulator/build/web-app/source/applications/web/$GENESYS_WEB_APP_EXEC"
+
 # Icone
 ICON_NAME=genesysico.gif
 PROJECT_ICON_PATH=$REPO_DIR
