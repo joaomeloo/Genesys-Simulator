@@ -1,21 +1,5 @@
 
 
-GenESyS is not best understood as a monolithic simulator with a fixed set of blocks. It is better understood as a **simulation platform** organized around a reusable kernel and an extensible ecosystem of components.
-
-That distinction matters.
-
-A conventional simulator is often perceived mainly through its user interface and its built-in modeling blocks. GenESyS, by contrast, is structured so that the **simulation engine**, the **model representation**, the **plugin system**, the **parser**, and the **event/trace infrastructure** can be studied and evolved as separate but connected subsystems.
-
-This makes the repository useful for at least three kinds of work:
-
-1. **Using the simulator** to build and run models.
-2. **Extending the simulator** with new components, data definitions, or domains.
-3. **Studying the simulator** as a software architecture for simulation research and education.
-
----
-
-## 3. Architectural Overview
-
 ### 3.1 Core idea
 
 At a high level, the repository organizes simulation around a few central abstractions:
