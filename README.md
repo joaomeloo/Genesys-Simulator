@@ -1,24 +1,4 @@
-dsafiles
-├── autoloadplugins.txt   # Plugins loaded automatically by the platform
-└── ...                   # Root config/build metadata
-```
 
-### 4.1 `source/`
-
-This is the most important directory for anyone who wants to understand or extend GenESyS.
-
-From the files visible in this repository, `source/` clearly contains at least:
-
-- a **kernel/simulator** area with classes such as:
-  - `Model.h`
-  - `ModelSimulation.h`
-  - `OnEventManager.h`
-  - `Parser_if.h`
-- a **plugins/components** area with components such as:
-  - `Create.cpp`
-  - and, by implication from the plugin list, many other simulation components.
-
-A useful mental map is:
 
 ```text
 source/
