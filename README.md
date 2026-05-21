@@ -1,25 +1,5 @@
 # Gendsadsadsadsad rel
-At its core, GenESyS combines:
-
-- a **simulation kernel**;
-- a **model execution engine**;
-- a **plugin system** for components and model data;
-- a **parser/expression evaluation infrastructure**;
-- **trace, event, and experiment support**;
-- and project assets for GUI/build/development workflows.
-
-The repository is especially interesting if you are looking for:
-
-- a simulation codebase written primarily in **C++**;
-- an architecture that separates **kernel**, **model**, **components**, and **extensions**;
-- a platform that can host **discrete-event simulation**, but is not restricted to it;
-- a simulator that exposes its internal design clearly enough to be studied, extended, or used for teaching.
-
----
-
-## 1. Repository at a Glance
-
-GitHub currently describes this repository as **"Generic and Expansible System Simulator"**. The top level of the repository contains, among other items:
+At dsaxpansible System Simulator"**. The top level of the repository contains, among other items:
 
 - `source/`
 - `models/`
