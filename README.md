@@ -1,26 +1,4 @@
-# Gendsadsadsadsad rel
-At dsaxpansible System Simulator"**. The top level of the repository contains, among other items:
 
-- `source/`
-- `models/`
-- `documentation/`
-- `projects/`
-- `docker/`
-- `temp/`
-- `autoloadplugins.txt`
-
-This already tells a lot about the project:
-
-- **`source/`** holds the implementation of the kernel and plugins.
-- **`models/`** is the natural place for example or test models.
-- **`documentation/`** groups supporting written material.
-- **`projects/`** suggests IDE/build project organization.
-- **`docker/`** indicates container-oriented development or reproducibility support.
-- **`autoloadplugins.txt`** shows that plugins are a first-class architectural concept.
-
----
-
-## 2. What GenESyS Is
 
 GenESyS is not best understood as a monolithic simulator with a fixed set of blocks. It is better understood as a **simulation platform** organized around a reusable kernel and an extensible ecosystem of components.
 
