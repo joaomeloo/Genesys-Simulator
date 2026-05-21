@@ -1,22 +1,4 @@
-- initialize simulation state,
-- process events over simulated time,
-- collect results,
-- and expose enough internal structure to support teaching, experimentation, and extension.
-
----
-
-## 4. Repository Organization
-
-Below is the most useful way to think about the repository structure.
-
-```text
-Genesys-Simulator/
-├── source/               # Kernel and plugin source code
-├── models/               # Example / test / study models
-├── documentation/        # Documentation and supporting material
-├── projects/             # IDE/build project files and development assets
-├── docker/               # Container support
-├── temp/                 # Temporary/generated/intermediate files
+dsafiles
 ├── autoloadplugins.txt   # Plugins loaded automatically by the platform
 └── ...                   # Root config/build metadata
 ```
