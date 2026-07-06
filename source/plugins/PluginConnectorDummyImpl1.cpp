@@ -47,6 +47,7 @@
 #include "plugins/components/ModalModel/ModalModelDefault.h"
 #include "plugins/components/DiscreteProcessing/Delay.h"
 #include "plugins/components/Continuous/DiffEquations.h"
+#include "plugins/components/Continuous/DiffusionSimulate.h"
 #include "components/Logic/Dispose.h"
 #include "plugins/components/Decisions/DropOff.h"
 #include "plugins/components/Template/DummyComponent.h"
@@ -97,6 +98,7 @@
 #include "plugins/data/BiochemicalSimulation/BioParameter.h"
 #include "plugins/data/BiochemicalSimulation/BioReaction.h"
 #include "plugins/data/BiochemicalSimulation/BioSpecies.h"
+#include "plugins/data/Continuous/DiffusionField.h"
 #include "plugins/data/BiochemicalSimulation/MetabolicNetwork.h"
 #include "plugins/data/BiochemicalSimulation/MetabolicReaction.h"
 #include "plugins/data/ExternalIntegration/CppCompiler.h"
@@ -435,8 +437,12 @@ Plugin* PluginConnectorDummyImpl1::connect(const std::string dynamicLibraryFilen
         GetInfo = &SignalData::GetPluginInformation;
     else if (fn == "diffequations.so")
         GetInfo = &DiffEquations::GetPluginInformation;
+    else if (fn == "diffusionfield.so")
+        GetInfo = &DiffusionField::GetPluginInformation;
     else if (fn == "lsode.so")
         GetInfo = &LSODE::GetPluginInformation;
+    else if (fn == "diffusionsimulate.so")
+        GetInfo = &DiffusionSimulate::GetPluginInformation;
     //else if (fn == "finiteelement.so")
     else if (fn == "old_odeelement.so")
         GetInfo = &OLD_ODEelement::GetPluginInformation;
