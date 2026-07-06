@@ -297,6 +297,13 @@ genesys_add_unit_test(genesys_test_plugins_continuous_diffusion
     genesys_kernel_util
 )
 
+genesys_add_unit_test(genesys_test_plugins_continuous_ode
+    test_plugins_continuous_ode.cpp
+    genesys_kernel_simulator_runtime
+    genesys_plugins_components_minimal
+    genesys_kernel_util
+)
+
 add_custom_target(genesys_kernel_unit_tests
     DEPENDS
         genesys_test_util
@@ -319,6 +326,7 @@ add_custom_target(genesys_kernel_unit_tests
         genesys_test_tools_ode_solver_factory
         genesys_test_tools_diffusion_mol
         genesys_test_plugins_continuous_diffusion
+        genesys_test_plugins_continuous_ode
         genesys_test_wcm_plugins
 )
 
@@ -402,6 +410,7 @@ add_custom_target(genesys_kernel_unit_tests_run
     COMMAND $<TARGET_FILE:genesys_test_tools_ode_solver_factory>
     COMMAND $<TARGET_FILE:genesys_test_tools_diffusion_mol>
     COMMAND $<TARGET_FILE:genesys_test_plugins_continuous_diffusion>
+    COMMAND $<TARGET_FILE:genesys_test_plugins_continuous_ode>
     COMMAND $<TARGET_FILE:genesys_test_wcm_plugins>
     COMMAND $<TARGET_FILE:genesys_test_kernel_simulator_method_inventory>
     DEPENDS

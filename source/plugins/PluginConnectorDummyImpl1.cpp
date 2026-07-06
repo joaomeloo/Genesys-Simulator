@@ -47,6 +47,7 @@
 #include "plugins/components/ModalModel/ModalModelDefault.h"
 #include "plugins/components/DiscreteProcessing/Delay.h"
 #include "plugins/components/Continuous/DiffEquations.h"
+#include "plugins/components/Continuous/ContinuousSystemComponent.h"
 #include "plugins/components/Continuous/DiffusionSimulate.h"
 #include "components/Logic/Dispose.h"
 #include "plugins/components/Decisions/DropOff.h"
@@ -111,6 +112,7 @@
 #include "data/Logic/Formula.h"
 #include "plugins/data/BiochemicalSimulation/GroProgram.h"
 #include "plugins/data/BiochemicalSimulation/BacteriaSignalGrid.h"
+#include "plugins/data/Continuous/ODESolver.h"
 #include "data/Logic/Label.h"
 #include "plugins/data/DiscreteProcessing/Schedule.h"
 #include "plugins/data/MaterialHandling/Sequence.h"
@@ -437,8 +439,12 @@ Plugin* PluginConnectorDummyImpl1::connect(const std::string dynamicLibraryFilen
         GetInfo = &SignalData::GetPluginInformation;
     else if (fn == "diffequations.so")
         GetInfo = &DiffEquations::GetPluginInformation;
+    else if (fn == "continuoussystemcomponent.so")
+        GetInfo = &ContinuousSystemComponent::GetPluginInformation;
     else if (fn == "diffusionfield.so")
         GetInfo = &DiffusionField::GetPluginInformation;
+    else if (fn == "odesolver.so")
+        GetInfo = &ODESolver::GetPluginInformation;
     else if (fn == "lsode.so")
         GetInfo = &LSODE::GetPluginInformation;
     else if (fn == "diffusionsimulate.so")
