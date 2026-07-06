@@ -5,7 +5,7 @@
 - Target branch: `WorkInProgress`
 - Temporary branch: `integration-dcs-ode-pde-to-workinprogress-20260705`
 - PR: #460, draft
-- Status: first implementation slice in progress. The tools-only Tema 8.2 numerical core was ported to the current `WorkInProgress` layout under `source/tools/Continuous/`, with focused unit tests registered in `source/tests/unit/CMakeLists.txt`. Plugin/data/component integration is still pending.
+- Status: first implementation slice validated locally. The tools-only Tema 8.2 numerical core was ported to the current `WorkInProgress` layout under `source/tools/Continuous/`, with focused unit tests registered in `source/tests/unit/CMakeLists.txt`. Plugin/data/component integration is still pending.
 
 ## Objective
 
@@ -154,24 +154,46 @@ Do not bring:
 
 ## Validation performed
 
-Validated by GitHub connector inspection and remote file operations only:
+Validated locally on `integration-dcs-ode-pde-to-workinprogress-20260705` after fetching the public upstream ref and checking out the branch in this workspace.
 
-- repository metadata;
-- PR state for #425, #437, and #439;
-- branch comparison;
-- `WorkInProgress` AI-assistant documentation;
-- `WorkInProgress` tools layout;
-- `WorkInProgress` unit-test CMake structure;
-- source file creation and CMake registration in the integration branch.
+Commands executed:
 
-No local build was run. No CMake/Ninja/CTest execution was possible from ChatGPT Web with GitHub connector.
+- `cmake --preset tests-unit`
+- `cmake --build --preset tests-unit`
+- `./source/tests/unit/genesys_test_tools_ode_solver_factory`
+- `./source/tests/unit/genesys_test_tools_diffusion_mol`
+- `ctest --preset tests-unit --output-on-failure`
+- `cmake --build --preset tests-unit --target genesys_test_tools_diffusion_mol`
+- `./source/tests/unit/genesys_test_tools_ode_solver_factory`
+- `./source/tests/unit/genesys_test_tools_diffusion_mol`
+
+Results:
+
+- `cmake --preset tests-unit`: succeeded.
+- `cmake --build --preset tests-unit`: succeeded.
+- `genesys_test_tools_ode_solver_factory`: 14 tests passed.
+- `genesys_test_tools_diffusion_mol`: 4 tests passed.
+- `ctest --preset tests-unit --output-on-failure`: succeeded with `100% tests passed, 0 tests failed out of 1679` and 4 disabled tests.
+- `cmake --build --preset tests-unit --target genesys_test_tools_diffusion_mol`: succeeded after adding the explicit `<utility>` include.
+
+Observed warnings outside the slice:
+
+- `source/tools/Statistics/FitterDummyImpl.cpp` still emits two `-Wreturn-type` warnings.
+- `source/applications/gui/genesys/propertyeditor/qtpropertybrowser/qteditorfactory.cpp` still emits a Qt deprecation warning about `QString::count()`.
+
+Corrections made in this slice:
+
+- Added `#include <utility>` to `source/tools/Continuous/DiffusionMethodOfLinesSystem.h` because the constructor uses `std::move`.
+
+Commit recorded for the code fix:
+
+- `e967a882` - `tools: fix continuous ODE/PDE includes`
 
 ## Risks remaining
 
-- The new header-only tools need actual CMake/Ninja/CTest validation.
-- The reduced diffusion test should later be expanded back toward the full accepted #425 test coverage.
 - Plugin/data/component integration is still pending.
 - Continuous-time semantics still need review: both DCS themes touch hybrid discrete/continuous simulation, and the current documentation requires explicit tests for time-step and event-calendar interaction.
+- The reduced diffusion test should later be expanded back toward the full accepted #425 test coverage.
 - `PluginConnectorDummyImpl1.cpp` and `source/tests/unit/CMakeLists.txt` are high-conflict files and must remain manually merged.
 
 ## Next steps
