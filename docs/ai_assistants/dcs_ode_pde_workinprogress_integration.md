@@ -5,7 +5,7 @@
 - Target branch: `WorkInProgress`
 - Temporary branch: `integration-dcs-ode-pde-to-workinprogress-20260705`
 - PR: #460, draft
-- Status: first implementation slice validated locally. The tools-only Tema 8.2 numerical core was ported to the current `WorkInProgress` layout under `source/tools/Continuous/`, and the diffusion plugin/data/component slice was added under `source/plugins/data/Continuous/` and `source/plugins/components/Continuous/` with a focused unit test registered in `source/tests/unit/CMakeLists.txt`. The Tema 8.1 `ODESolver` / `ContinuousSystemComponent` slice is still pending.
+- Status: the Tema 8.2 tools-only numerical core, the Tema 8.2 diffusion plugin/data/component slice, and the Tema 8.1 `ODESolver` / `ContinuousSystemComponent` slice were ported to the current `WorkInProgress` layout and validated locally with the unit-test preset.
 
 ## Objective
 
@@ -145,12 +145,37 @@ Adaptation decisions:
 - Register the new plugin pair through the dummy connector with `diffusionfield.so` and `diffusionsimulate.so`.
 - Keep the diffusion unit test end-to-end, exercising the real kernel, the new data plugin, and the new component plugin.
 
+### Tema 8.1 continuous ODE slice
+
+Created/adapted:
+
+- `source/plugins/data/Continuous/ODESolver.h`
+- `source/plugins/data/Continuous/ODESolver.cpp`
+- `source/plugins/components/Continuous/ContinuousSystemComponent.h`
+- `source/plugins/components/Continuous/ContinuousSystemComponent.cpp`
+
+Connector and registration updates:
+
+- `source/plugins/PluginConnectorDummyImpl1.cpp`
+
+Unit tests:
+
+- `source/tests/unit/test_plugins_continuous_ode.cpp`
+
+CMake updated:
+
+- `source/tests/unit/CMakeLists.txt`
+
+Adaptation decisions:
+
+- Preserve the current `WorkInProgress` layout under `source/plugins/data/Continuous/` and `source/plugins/components/Continuous/`.
+- Register the new plugin pair through the dummy connector with `odesolver.so` and `continuoussystemcomponent.so`.
+- Validate the ODE solver numerically with a harmonic-oscillator integration test that also checks save/load round-trip behavior.
+
 ## Explicitly not implemented yet
 
 Not yet ported:
 
-- `source/plugins/data/Continuous/ODESolver.*`
-- `source/plugins/components/Continuous/ContinuousSystemComponent.*`
 - selected `LSODE.*` changes
 - selected `DiffEquations.*` changes
 - selected manual connector registration cleanup beyond the new diffusion pair
@@ -186,6 +211,9 @@ Commands executed:
 - `./source/tests/unit/genesys_test_tools_diffusion_mol`
 - `cmake --build --preset tests-unit --target genesys_test_plugins_continuous_diffusion`
 - `./source/tests/unit/genesys_test_plugins_continuous_diffusion`
+- `cmake --build --preset tests-unit --target genesys_test_plugins_continuous_ode`
+- `./source/tests/unit/genesys_test_plugins_continuous_ode`
+- `cmake --build --preset tests-unit`
 - `ctest --preset tests-unit --output-on-failure`
 
 Results:
@@ -198,7 +226,10 @@ Results:
 - `cmake --build --preset tests-unit --target genesys_test_tools_diffusion_mol`: succeeded after adding the explicit `<utility>` include.
 - `cmake --build --preset tests-unit --target genesys_test_plugins_continuous_diffusion`: succeeded after adapting the diffusion plugin includes and connector registration.
 - `genesys_test_plugins_continuous_diffusion`: 10 tests passed.
-- `ctest --preset tests-unit --output-on-failure`: succeeded with `100% tests passed, 0 tests failed out of 1689` and 4 disabled tests.
+- `cmake --build --preset tests-unit --target genesys_test_plugins_continuous_ode`: succeeded after porting `ODESolver` / `ContinuousSystemComponent` and registering the new target.
+- `genesys_test_plugins_continuous_ode`: 3 tests passed.
+- `cmake --build --preset tests-unit`: succeeded.
+- `ctest --preset tests-unit --output-on-failure`: succeeded with `100% tests passed, 0 tests failed out of 1692` and 4 disabled tests.
 
 Observed warnings outside the slice:
 
@@ -211,18 +242,21 @@ Corrections made in this slice:
 - Added the `source/plugins/data/Continuous/DiffusionField.*` and `source/plugins/components/Continuous/DiffusionSimulate.*` plugin slice.
 - Updated `source/plugins/PluginConnectorDummyImpl1.cpp` to register `diffusionfield.so` and `diffusionsimulate.so`.
 - Registered `genesys_test_plugins_continuous_diffusion` in `source/tests/unit/CMakeLists.txt`.
+- Added `source/plugins/data/Continuous/ODESolver.*` and `source/plugins/components/Continuous/ContinuousSystemComponent.*`.
+- Updated `source/plugins/PluginConnectorDummyImpl1.cpp` to register `odesolver.so` and `continuoussystemcomponent.so`.
+- Registered `genesys_test_plugins_continuous_ode` in `source/tests/unit/CMakeLists.txt`.
 
 Commit recorded for the code fix:
 
 - `e967a882` - `tools: fix continuous ODE/PDE includes`
 - `4d37ea41` - `plugins: add continuous diffusion slice`
+- `dcf841b0` - `plugins: port continuous ODE slice`
 
 ## Risks remaining
 
-- The Tema 8.1 `ODESolver` / `ContinuousSystemComponent` slice is still pending.
 - Continuous-time semantics still need review: both DCS themes touch hybrid discrete/continuous simulation, and the current documentation requires explicit tests for time-step and event-calendar interaction.
 - The reduced diffusion test should later be expanded back toward the full accepted #425 test coverage.
-- `PluginConnectorDummyImpl1.cpp` and `source/tests/unit/CMakeLists.txt` remain high-conflict files for the remaining Tema 8.1 work and future connector cleanup.
+- `PluginConnectorDummyImpl1.cpp` and `source/tests/unit/CMakeLists.txt` remain high-conflict files for future connector cleanup and any later LSODE / DiffEquations port.
 
 ## Next steps
 
@@ -230,7 +264,6 @@ Commit recorded for the code fix:
    - `cmake --preset tests-unit`
    - `cmake --build --preset tests-unit`
    - `ctest --preset tests-unit --output-on-failure`
-2. Port Tema 8.1 `ODESolver` and `ContinuousSystemComponent` after the tools layout is stable.
-3. Review whether `DiffusionField` should later be split or simplified further for the remaining connector work.
-4. Keep manually merging connector registrations into `PluginConnectorDummyImpl1.cpp` without dropping newer `WorkInProgress` entries.
-5. Run full `tests-unit` and targeted continuous/hybrid tests before merging into `WorkInProgress`.
+2. Review whether `DiffusionField` should later be split or simplified further for the remaining connector work.
+3. Keep manually merging connector registrations into `PluginConnectorDummyImpl1.cpp` without dropping newer `WorkInProgress` entries.
+4. If LSODE / DiffEquations are ported later, revalidate the hybrid time-step interaction with a focused regression test.
