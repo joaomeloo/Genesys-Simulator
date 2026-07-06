@@ -63,6 +63,10 @@ void Variable::setValue(double value, std::string index) {
 	_values->setValue(value, index);
 }
 
+void Variable::copyValuesFrom(const Variable& source) {
+	_values->copyFrom(*source._values);
+}
+
 std::string Variable::getInitialValuesText() const {
 	return Attribute::getInitialValuesText();
 }
@@ -84,7 +88,8 @@ ModelDataDefinition* Variable::LoadInstance(Model* model, PersistenceRecord *fie
 	Variable* newElement = new Variable(model);
 	try {
 		newElement->_loadInstance(fields);
-	} catch (const std::exception&) {
+	} catch (const std::exception& e) {
+		newElement->traceError("Failed to load Variable instance: " + std::string(e.what()));
 	}
 	return newElement;
 }
